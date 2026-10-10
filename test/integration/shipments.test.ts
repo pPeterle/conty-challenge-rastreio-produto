@@ -240,3 +240,66 @@ describe("webhook do agregador", () => {
     expect(unknown.status).toBe(404);
   });
 });
+
+describe("devolução ao remetente", () => {
+  it("postado, devolvido e entregue ao remetente não viram entregue e o job de atraso continua avaliando", async () => {
+    const t = setup({ delayLimitHours: 72, now: "2026-10-01T12:00:00Z" });
+    const s = await t.register();
+    await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-01T12:00:00Z");
+    await t.carrierEvent(s.aggregator_ref, "Objeto devolvido ao remetente", "2026-10-03T12:00:00Z");
+    await t.carrierEvent(s.aggregator_ref, "Objeto entregue ao remetente", "2026-10-04T10:00:00Z");
+    const res = await t.call("POST", `/shipments/${s.id}/refresh`);
+    expect(res.body.shipment).toMatchObject({ status: "excecao", delivered_at: null });
+
+    t.clock.set("2026-10-04T12:00:00.001Z");
+    expect((await t.call("POST", "/jobs/check-delays")).body.alerts_created).toEqual([s.id]);
+  });
+});
+
+describe("validação do payload do agregador", () => {
+  const payload = (ref: string, checkpointTime: string, carrier = "correios") => ({
+    tracker: {
+      id: ref,
+      tracking_number: "QB123456789BR",
+      carrier,
+      checkpoints: [{ checkpoint_id: "c1", carrier_status: "Objeto postado", checkpoint_time: checkpointTime }],
+    },
+  });
+
+  it.each(["1", "2026-10-01", "2026-10-01T10:00:00", "2026-10-01 10:00:00Z", "ontem"])(
+    "checkpoint_time %s sem formato ISO 8601 com fuso responde 400",
+    async (checkpointTime) => {
+      const t = setup();
+      const s = await t.register();
+      const res = await t.webhook(payload(s.aggregator_ref, checkpointTime));
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("payload_invalido");
+      expect((await t.call("GET", `/shipments/${s.id}`)).body.events).toEqual([]);
+    },
+  );
+
+  it.each(["2026-10-01T10:00:00Z", "2026-10-01T07:00:00-03:00", "2026-10-01T10:00:00.123Z", "2026-10-01T10:00Z"])(
+    "checkpoint_time %s é aceito",
+    async (checkpointTime) => {
+      const t = setup();
+      const s = await t.register();
+      expect((await t.webhook(payload(s.aggregator_ref, checkpointTime))).status).toBe(200);
+    },
+  );
+
+  it("polling com checkpoint_time sem fuso também é recusado", async () => {
+    const t = setup();
+    const s = await t.register();
+    await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-01T10:00:00");
+    const res = await t.call("POST", `/shipments/${s.id}/refresh`);
+    expect(res.status).toBe(400);
+  });
+
+  it("webhook com transportadora diferente da cadastrada responde 400", async () => {
+    const t = setup();
+    const s = await t.register();
+    const res = await t.webhook(payload(s.aggregator_ref, "2026-10-01T10:00:00Z", "loggi"));
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain("não confere com a cadastrada");
+  });
+});

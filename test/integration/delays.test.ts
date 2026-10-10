@@ -42,7 +42,7 @@ describe("detecção de atraso com relógio controlado", () => {
     expect(shipment.alerts[0]).toMatchObject({
       kind: "atraso",
       created_at: "2026-10-04T12:00:00.001Z",
-      details: { status: "postado", transit_started_at: POSTED_AT, limit_hours: 72, elapsed_hours: 72 },
+      details: { status: "postado", needs_review: false, transit_started_at: POSTED_AT, limit_hours: 72, elapsed_hours: 72 },
     });
   });
 

@@ -14,19 +14,20 @@ function normalizeText(value: string): string {
 /**
  * Correios descreve em texto livre e às vezes acrescenta complemento
  * ("Objeto em trânsito - por favor aguarde"), por isso o casamento é por prefixo.
- * A ordem importa: "objeto nao entregue" precisa vir antes de qualquer regra
- * mais curta que pudesse casar com ele.
+ * "Entregue" só vale com o destinatário no texto: "Objeto entregue ao remetente"
+ * ou "Objeto entregue na unidade de origem" não são entrega ao criador.
  */
 const CORREIOS_PREFIXES: Array<[string, EventStatus]> = [
   ["objeto nao entregue", "excecao"],
   ["objeto devolvido", "excecao"],
+  ["objeto entregue ao remetente", "excecao"],
   ["objeto extraviado", "excecao"],
   ["objeto postado", "postado"],
   ["objeto em transito", "em_transito"],
   ["objeto encaminhado", "em_transito"],
   ["objeto saiu para entrega", "saiu_para_entrega"],
   ["saiu para entrega", "saiu_para_entrega"],
-  ["objeto entregue", "entregue"],
+  ["objeto entregue ao destinatario", "entregue"],
 ];
 
 const JADLOG_CODES: Record<string, EventStatus> = {
@@ -68,18 +69,19 @@ export function mapCarrierStatus(carrier: string, carrierStatus: string): EventS
 export function toNormalizedEvent(carrier: string, checkpoint: RawCheckpoint): NormalizedEvent {
   const occurredAt = new Date(checkpoint.checkpoint_time);
   const location = checkpoint.location?.trim() || null;
+  const rawCode = checkpoint.carrier_status.trim();
   // Sem id do agregador, a identidade do evento é o que ele descreve: quando, o quê e onde.
   const key =
     checkpoint.checkpoint_id ??
     "h:" +
       createHash("sha256")
-        .update(`${occurredAt.toISOString()}|${checkpoint.carrier_status}|${location ?? ""}`)
+        .update(`${occurredAt.toISOString()}|${rawCode}|${location ?? ""}`)
         .digest("hex")
         .slice(0, 32);
   return {
     key,
-    status: mapCarrierStatus(carrier, checkpoint.carrier_status),
-    rawCode: checkpoint.carrier_status,
+    status: mapCarrierStatus(carrier, rawCode),
+    rawCode,
     description: checkpoint.message?.trim() || null,
     location,
     occurredAt,

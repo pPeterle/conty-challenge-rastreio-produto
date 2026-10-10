@@ -19,6 +19,8 @@ export interface TrackingAggregator {
 
 export interface TrackingUpdate {
   ref: string;
+  /** Transportadora que o agregador informou, quando ele informa. */
+  carrier?: string;
   events: NormalizedEvent[];
 }
 

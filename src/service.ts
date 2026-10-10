@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { TrackingAggregator, TrackingUpdate, WebhookRequest } from "./aggregator/types.ts";
+import { InvalidPayloadError, type TrackingAggregator, type TrackingUpdate, type WebhookRequest } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { Db, EventRow, ShipmentRow } from "./db.ts";
 import { isDelayed } from "./domain/delay.ts";
@@ -69,6 +69,12 @@ export class TrackingService {
     const update: TrackingUpdate = this.aggregator.parseWebhook(request);
     const shipment = this.db.findShipmentByRef(update.ref);
     if (!shipment) throw new NotFoundError(`nenhuma remessa cadastrada para a referência ${update.ref}`);
+    // O dialeto é escolhido pela transportadora; se ela diverge do cadastro, a tradução não é confiável.
+    if (update.carrier !== undefined && update.carrier.toLowerCase() !== shipment.carrier) {
+      throw new InvalidPayloadError(
+        `transportadora ${update.carrier} não confere com a cadastrada (${shipment.carrier}) para ${update.ref}`,
+      );
+    }
     return this.apply(shipment.id, update.events);
   }
 
@@ -126,6 +132,7 @@ export class TrackingService {
         "atraso",
         {
           status: shipment.status,
+          needs_review: shipment.needs_review === 1,
           transit_started_at: shipment.transit_started_at,
           elapsed_hours: Math.round((elapsedMs / 3_600_000) * 10) / 10,
           limit_hours: this.config.delayLimitMs / 3_600_000,

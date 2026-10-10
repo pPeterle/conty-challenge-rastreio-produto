@@ -60,7 +60,7 @@ O domínio só conhece `NormalizedEvent`. O formato do agregador (`tracker`, `ch
 
 ## Do payload bruto ao status normalizado
 
-As transportadoras falam dialetos diferentes. Correios manda texto livre, às vezes com complemento (o casamento é por prefixo, sem acento e sem diferenciar maiúsculas). Jadlog manda códigos em caixa alta e Loggi manda códigos em inglês. A tabela fica em `src/aggregator/fake/mapping.ts`:
+As transportadoras falam dialetos diferentes. Correios manda texto livre, às vezes com complemento (o casamento é por prefixo, sem acento e sem diferenciar maiúsculas). Para `entregue` o prefixo exige "ao destinatário", porque "Objeto entregue ao remetente" ou "à transportadora" também começam com "Objeto entregue" e não significam que o pacote chegou ao criador. Jadlog manda códigos em caixa alta e Loggi manda códigos em inglês. A tabela fica em `src/aggregator/fake/mapping.ts`:
 
 | transportadora | bruto | normalizado |
 |---|---|---|
@@ -68,6 +68,8 @@ As transportadoras falam dialetos diferentes. Correios manda texto livre, às ve
 | correios | `Objeto em trânsito - por favor aguarde` | `em_transito` |
 | correios | `Objeto saiu para entrega ao destinatário` | `saiu_para_entrega` |
 | correios | `Objeto entregue ao destinatário` | `entregue` |
+| correios | `Objeto devolvido ao remetente`, `Objeto entregue ao remetente` | `excecao` |
+| correios | `Objeto entregue na unidade de origem para devolução`, `Objeto entregue parcialmente` | `desconhecido` |
 | correios | `Objeto não entregue - destinatário ausente` | `excecao` |
 | jadlog | `EMISSAO`, `TRANSFERENCIA`, `EM ROTA`, `ENTREGUE` | `postado`, `em_transito`, `saiu_para_entrega`, `entregue` |
 | loggi | `picked_up`, `in_transit`, `out_for_delivery`, `delivered`, `delivery_failed` | `postado`, `em_transito`, `saiu_para_entrega`, `entregue`, `excecao` |
@@ -108,11 +110,11 @@ Payload bruto que o agregador fictício devolveu numa execução real (`GET /v1/
 }
 ```
 
-A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HOURS=72`, consultada em 2026-10-10 por volta de 03:30 UTC):
+A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HOURS=72`, consultada em 2026-10-10 por volta de 03:55 UTC):
 
 ```json
 {
-  "id": "shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9",
+  "id": "shp_a7cdbcda-506e-413d-9370-a1e60e2bde49",
   "carrier": "correios",
   "tracking_code": "QB123456789BR",
   "aggregator_ref": "trk_1",
@@ -127,7 +129,7 @@ A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HO
     { "status": "em_transito", "raw_code": "Objeto em trânsito - por favor aguarde", "description": "de Unidade de Tratamento, Cajamar/SP para Unidade de Distribuição, Curitiba/PR", "location": "Cajamar/SP", "occurred_at": "2026-10-08T12:12:00.000Z" },
     { "status": "desconhecido", "raw_code": "Objeto aguardando conferência na unidade", "description": null, "location": "Curitiba/PR", "occurred_at": "2026-10-09T10:30:00.000Z" }
   ],
-  "status_changes": [{ "from": null, "to": "em_transito", "at": "2026-10-10T03:30:20.346Z" }],
+  "status_changes": [{ "from": null, "to": "em_transito", "at": "2026-10-10T03:55:15.695Z" }],
   "alerts": []
 }
 ```
@@ -175,6 +177,10 @@ Pensei em tratar desconhecido como `excecao`. Desisti porque transportadora muda
 
 Cada evento tem uma chave. O agregador fictício manda `checkpoint_id` e eu uso esse valor. Sem ele, a chave é um hash de horário (normalizado para UTC), código bruto e local. A tabela `tracking_events` tem `UNIQUE (shipment_id, event_key)` e o insert usa `ON CONFLICT DO NOTHING`. Consultar de novo, receber o mesmo webhook várias vezes ou receber o mesmo evento por polling e por webhook grava o evento uma vez só.
 
+Uma consequência: se o agregador corrigir um evento mantendo o mesmo `checkpoint_id` (outro horário ou outro texto), a correção é ignorada e vale a primeira versão recebida. Escolhi assim porque não sei como um agregador real sinaliza correções, e sobrescrever silenciosamente abriria espaço para o histórico mudar depois de usado.
+
+O cliente também recusa com 400 um `checkpoint_time` que não seja ISO 8601 com fuso (`Z` ou `±hh:mm`). Sem fuso, o instante dependeria do fuso do servidor, e valores como `"1"` passariam pelo `Date.parse`. Um webhook cuja transportadora diverge da cadastrada para aquela referência também volta 400, porque a tradução depende do dialeto da transportadora.
+
 ### Atraso
 
 `isDelayed` (`src/domain/delay.ts`) considera atraso quando:
@@ -215,7 +221,7 @@ curl -s -X POST localhost:3105/shipments -H 'content-type: application/json' \
 ```
 
 ```json
-{"id":"shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
+{"id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
 ```
 
 Repetir o mesmo cadastro devolve 200 com a mesma remessa.
@@ -243,7 +249,7 @@ curl -s -X POST localhost:3105/webhooks/aggregator -H 'content-type: application
 ```
 
 ```json
-{"new_events":0,"shipment_id":"shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9","status":"em_transito"}
+{"new_events":0,"shipment_id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","status":"em_transito"}
 ```
 
 Webhook forjado dizendo "entregue", sem assinatura (401) e com a assinatura de outro corpo (401):
@@ -260,8 +266,8 @@ curl -s -X POST localhost:3105/jobs/check-delays
 ```
 
 ```json
-{"checked":1,"delayed":["shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9"],"alerts_created":["shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9"]}
-{"checked":1,"delayed":["shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9"],"alerts_created":[]}
+{"checked":1,"delayed":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"],"alerts_created":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"]}
+{"checked":1,"delayed":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"],"alerts_created":[]}
 ```
 
 ```bash
@@ -269,7 +275,7 @@ curl -s localhost:3105/alerts
 ```
 
 ```json
-{"alerts":[{"id":1,"shipment_id":"shp_476c2cae-7cdb-47d1-82e7-eb70f304a7e9","kind":"atraso","details":{"status":"em_transito","transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":79.8,"limit_hours":72},"created_at":"2026-10-10T03:30:20.475Z"}]}
+{"alerts":[{"id":1,"shipment_id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","kind":"atraso","details":{"status":"em_transito","needs_review":true,"transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":80.3,"limit_hours":72},"created_at":"2026-10-10T03:55:15.927Z"}]}
 ```
 
 Validação:
@@ -299,21 +305,21 @@ Com várias instâncias, o caminho seria Postgres com as mesmas restrições UNI
 
 `npm run load` sobe API e agregador com banco temporário, cadastra 40 remessas em 4 cenários (entrega normal, atrasada com status inventado, exceção resolvida, exceção em aberto) e roda o k6 (`load/tracking.js`) por 30 s com até 50 VUs. Cada iteração escolhe uma remessa e faz uma de quatro coisas: webhook assinado com um subconjunto embaralhado dos eventos e um evento repetido (65%), webhook forjado dizendo "entregue" com assinatura errada, que precisa voltar 401 (5%), polling (25%) ou o job de atraso (5%). No fim, `scripts/verify-load.ts` confere para cada remessa a quantidade de eventos, a ausência de duplicatas, o status final, `needs_review`, a quantidade de alertas e se alguma mudança de status regrediu. Se algo quebrar, sai com código 1.
 
-Resultado de uma execução real na minha máquina (macOS, k6 0.54.0 no Docker):
+Resultado da última execução real na minha máquina (macOS, k6 0.54.0 no Docker):
 
 ```
      ✓ webhook 200
+     ✓ webhook forjado 401
      ✓ refresh 200
      ✓ check-delays 200
-     ✓ webhook forjado 401
-   ✓ checks.........................: 100.00% 142000 out of 142000
-   ✓ http_req_duration..............: avg=8.82ms  min=90.7µs   med=5.48ms max=202.43ms p(90)=20.54ms p(95)=23.91ms
-   ✓ http_req_failed................: 0.00%   0 out of 142041
-     http_reqs......................: 142041  4731.053434/s
+   ✓ checks.........................: 100.00% 47855 out of 47855
+   ✓ http_req_duration..............: avg=26.18ms min=301.45µs med=16.14ms max=485.65ms p(90)=62.68ms p(95)=85.01ms
+   ✓ http_req_failed................: 0.00%   0 out of 47896
+     http_reqs......................: 47896   1594.289013/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 
-Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números variam entre execuções.
+Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números variam bastante entre execuções: uma rodada anterior, com o mesmo cenário, fez 4731 req/s com p95 de 23,91 ms.
 
 ## O que ficou de fora
 
@@ -324,6 +330,7 @@ Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números v
 - Fila de revisão para os eventos `desconhecido`. Existe o sinal `needs_review`, mas não há rota para listar só esses casos nem para acrescentar código na tabela sem deploy.
 - Rotação de segredo do webhook e proteção contra replay (timestamp assinado).
 - Autenticação da própria API.
+- Correção de evento já recebido (mesmo `checkpoint_id` com dados diferentes): hoje vale a primeira versão, sem aviso.
 
 ## O que eu faria diferente com mais tempo
 
@@ -331,6 +338,6 @@ Colocaria a tabela de tradução no banco, com uma tela simples para quem revisa
 
 ## Uso de IA
 
-O código, os testes e este README foram produzidos com Claude Code (Claude Opus) a partir do enunciado do desafio. A assinatura HMAC do webhook entrou depois que uma revisão de segurança automática apontou que a rota aceitava eventos sem autenticação.
+O código, os testes e este README foram produzidos com Claude Code (Claude Opus) a partir do enunciado do desafio. A assinatura HMAC do webhook entrou numa revisão de segurança.
 
-O que eu revisei: _(rascunho para eu confirmar)_ revisei as regras de status, desconhecido e atraso e os testes que cobrem cada critério, rodei `npm test`, `npm run typecheck` e `npm run load` localmente e conferi os exemplos de curl contra a API rodando.
+O que eu revisei: revisei as regras de status, desconhecido e atraso e os testes que cobrem cada critério, rodei `npm test`, `npm run typecheck` e `npm run load` localmente e conferi os exemplos de curl contra a API rodando.

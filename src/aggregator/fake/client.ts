@@ -25,14 +25,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// ISO 8601 com fuso obrigatório: sem ele o instante dependeria do TZ do servidor.
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
 function parseCheckpoint(value: unknown): RawCheckpoint {
   if (!isRecord(value)) throw new InvalidPayloadError("checkpoint não é um objeto");
   const { checkpoint_id, carrier_status, message, location, checkpoint_time } = value;
   if (typeof carrier_status !== "string" || carrier_status.trim() === "") {
     throw new InvalidPayloadError("checkpoint sem carrier_status");
   }
-  if (typeof checkpoint_time !== "string" || Number.isNaN(Date.parse(checkpoint_time))) {
-    throw new InvalidPayloadError("checkpoint com checkpoint_time inválido");
+  if (
+    typeof checkpoint_time !== "string" ||
+    !ISO_WITH_OFFSET.test(checkpoint_time) ||
+    Number.isNaN(Date.parse(checkpoint_time))
+  ) {
+    throw new InvalidPayloadError("checkpoint_time precisa ser ISO 8601 com fuso (Z ou ±hh:mm)");
   }
   if (checkpoint_id !== undefined && typeof checkpoint_id !== "string") {
     throw new InvalidPayloadError("checkpoint_id precisa ser texto");
@@ -60,6 +67,7 @@ function parseTracker(body: unknown): RawTracker {
 function toUpdate(tracker: RawTracker): TrackingUpdate {
   return {
     ref: tracker.id,
+    carrier: tracker.carrier,
     events: tracker.checkpoints.map((checkpoint) => toNormalizedEvent(tracker.carrier, checkpoint)),
   };
 }
