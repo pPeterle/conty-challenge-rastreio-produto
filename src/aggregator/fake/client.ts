@@ -8,7 +8,8 @@ import {
 } from "../types.ts";
 import { toNormalizedEvent } from "./mapping.ts";
 import { isValidSignature, SIGNATURE_HEADER } from "./signature.ts";
-import type { RawCheckpoint, RawTracker } from "./raw.ts";
+import { issuesOf, summarize } from "../../validation.ts";
+import { rawEnvelopeSchema, signatureSchema, type RawTracker } from "./schemas.ts";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -21,47 +22,12 @@ export interface FakeAggregatorClientOptions {
   timeoutMs?: number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// ISO 8601 com fuso obrigatório: sem ele o instante dependeria do TZ do servidor.
-const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
-
-function parseCheckpoint(value: unknown): RawCheckpoint {
-  if (!isRecord(value)) throw new InvalidPayloadError("checkpoint não é um objeto");
-  const { checkpoint_id, carrier_status, message, location, checkpoint_time } = value;
-  if (typeof carrier_status !== "string" || carrier_status.trim() === "") {
-    throw new InvalidPayloadError("checkpoint sem carrier_status");
-  }
-  if (
-    typeof checkpoint_time !== "string" ||
-    !ISO_WITH_OFFSET.test(checkpoint_time) ||
-    Number.isNaN(Date.parse(checkpoint_time))
-  ) {
-    throw new InvalidPayloadError("checkpoint_time precisa ser ISO 8601 com fuso (Z ou ±hh:mm)");
-  }
-  if (checkpoint_id !== undefined && typeof checkpoint_id !== "string") {
-    throw new InvalidPayloadError("checkpoint_id precisa ser texto");
-  }
-  return {
-    checkpoint_id,
-    carrier_status,
-    message: typeof message === "string" ? message : null,
-    location: typeof location === "string" ? location : null,
-    checkpoint_time,
-  };
-}
-
 function parseTracker(body: unknown): RawTracker {
-  const tracker = isRecord(body) ? body.tracker : undefined;
-  if (!isRecord(tracker)) throw new InvalidPayloadError("payload sem o objeto tracker");
-  const { id, tracking_number, carrier, checkpoints } = tracker;
-  if (typeof id !== "string" || typeof tracking_number !== "string" || typeof carrier !== "string") {
-    throw new InvalidPayloadError("tracker precisa de id, tracking_number e carrier");
+  const result = rawEnvelopeSchema.safeParse(body);
+  if (!result.success) {
+    throw new InvalidPayloadError(`payload do agregador inválido: ${summarize(result.error)}`, issuesOf(result.error));
   }
-  if (!Array.isArray(checkpoints)) throw new InvalidPayloadError("tracker.checkpoints precisa ser uma lista");
-  return { id, tracking_number, carrier, checkpoints: checkpoints.map(parseCheckpoint) };
+  return result.data.tracker;
 }
 
 function toUpdate(tracker: RawTracker): TrackingUpdate {
@@ -101,9 +67,14 @@ export class FakeAggregatorClient implements TrackingAggregator {
   }
 
   parseWebhook(request: WebhookRequest): TrackingUpdate {
-    const signature = request.header(SIGNATURE_HEADER);
-    if (!signature) throw new InvalidSignatureError(`header ${SIGNATURE_HEADER} ausente`);
-    if (!isValidSignature(request.body, signature, this.webhookSecret)) {
+    // A assinatura vale para os bytes recebidos: confere antes de qualquer parse.
+    const header = request.header(SIGNATURE_HEADER);
+    if (!header) throw new InvalidSignatureError(`header ${SIGNATURE_HEADER} ausente`);
+    const signature = signatureSchema.safeParse(header);
+    if (!signature.success) {
+      throw new InvalidSignatureError(`header ${SIGNATURE_HEADER} com ${signature.error.issues[0].message}`);
+    }
+    if (!isValidSignature(request.body, signature.data, this.webhookSecret)) {
       throw new InvalidSignatureError(`assinatura do header ${SIGNATURE_HEADER} não confere com o corpo`);
     }
     let body: unknown;

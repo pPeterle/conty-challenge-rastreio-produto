@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import type { RawCheckpoint, RawTracker } from "../aggregator/fake/raw.ts";
+import { z } from "../validation.ts";
+import { rawCheckpointSchema, registerTrackerSchema, type RawCheckpoint, type RawTracker } from "../aggregator/fake/schemas.ts";
 import { SIGNATURE_HEADER, signBody } from "../aggregator/fake/signature.ts";
 
 export interface FakeAggregatorOptions {
@@ -24,12 +25,9 @@ export function createFakeAggregatorApp(options: FakeAggregatorOptions = {}) {
   const app = new Hono();
 
   app.post("/v1/trackers", async (c) => {
-    const body = await c.req.json().catch(() => null);
-    const trackingNumber = body?.tracking_number;
-    const carrier = body?.carrier;
-    if (typeof trackingNumber !== "string" || typeof carrier !== "string") {
-      return c.json({ message: "tracking_number and carrier are required" }, 400);
-    }
+    const parsed = registerTrackerSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ message: "tracking_number and carrier are required" }, 400);
+    const { tracking_number: trackingNumber, carrier } = parsed.data;
     const codeKey = `${carrier}:${trackingNumber}`;
     const existing = byCode.get(codeKey);
     if (existing) return c.json({ tracker: trackers.get(existing) }, 200);
@@ -50,10 +48,12 @@ export function createFakeAggregatorApp(options: FakeAggregatorOptions = {}) {
   app.post("/v1/trackers/:id/checkpoints", async (c) => {
     const tracker = trackers.get(c.req.param("id"));
     if (!tracker) return c.json({ message: "tracker not found" }, 404);
-    const body = (await c.req.json().catch(() => null)) as Partial<RawCheckpoint> | null;
-    if (typeof body?.carrier_status !== "string" || typeof body.checkpoint_time !== "string") {
-      return c.json({ message: "carrier_status and checkpoint_time are required" }, 400);
-    }
+    // O simulador aceita qualquer texto de data: é assim que os testes reproduzem um agregador que manda lixo.
+    const parsed = rawCheckpointSchema
+      .extend({ checkpoint_time: z.string().min(1) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ message: "carrier_status and checkpoint_time are required" }, 400);
+    const body = parsed.data;
     const checkpoint: RawCheckpoint = {
       checkpoint_id: body.checkpoint_id ?? `cp_${++checkpointSeq}`,
       carrier_status: body.carrier_status,

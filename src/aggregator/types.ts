@@ -29,7 +29,14 @@ export interface WebhookRequest {
   header(name: string): string | undefined;
 }
 
-export class InvalidPayloadError extends Error {}
+export class InvalidPayloadError extends Error {
+  constructor(
+    message: string,
+    readonly details?: Array<{ path: string; message: string }>,
+  ) {
+    super(message);
+  }
+}
 
 export class InvalidSignatureError extends Error {}
 

@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS shipments (
 );
 
 -- A UNIQUE (shipment_id, event_key) é o que impede histórico duplicado.
+CREATE INDEX IF NOT EXISTS idx_shipments_created ON shipments (created_at, id);
+CREATE INDEX IF NOT EXISTS idx_shipments_in_transit ON shipments (transit_started_at)
+  WHERE transit_started_at IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS tracking_events (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   shipment_id TEXT NOT NULL REFERENCES shipments(id),
@@ -151,8 +155,10 @@ export class Db {
     return this.raw.prepare("SELECT * FROM shipments WHERE aggregator_ref = ?").get(ref) as ShipmentRow | undefined;
   }
 
-  listShipments(): ShipmentRow[] {
-    return this.raw.prepare("SELECT * FROM shipments ORDER BY created_at, id").all() as unknown as ShipmentRow[];
+  listShipments(limit: number, offset: number): ShipmentRow[] {
+    return this.raw
+      .prepare("SELECT * FROM shipments ORDER BY created_at, id LIMIT ? OFFSET ?")
+      .all(limit, offset) as unknown as ShipmentRow[];
   }
 
   /** Remessas em que o relógio de trânsito está correndo (candidatas a atraso). */
@@ -238,12 +244,13 @@ export class Db {
     return result.changes > 0;
   }
 
-  listAlerts(shipmentId?: string): AlertRow[] {
-    if (shipmentId) {
-      return this.raw
-        .prepare("SELECT * FROM alerts WHERE shipment_id = ? ORDER BY id")
-        .all(shipmentId) as unknown as AlertRow[];
-    }
-    return this.raw.prepare("SELECT * FROM alerts ORDER BY id").all() as unknown as AlertRow[];
+  listAlerts(shipmentId: string): AlertRow[] {
+    return this.raw
+      .prepare("SELECT * FROM alerts WHERE shipment_id = ? ORDER BY id")
+      .all(shipmentId) as unknown as AlertRow[];
+  }
+
+  listAlertsPage(limit: number, offset: number): AlertRow[] {
+    return this.raw.prepare("SELECT * FROM alerts ORDER BY id LIMIT ? OFFSET ?").all(limit, offset) as unknown as AlertRow[];
   }
 }

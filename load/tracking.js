@@ -8,6 +8,8 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:3105";
 const AGG_URL = __ENV.AGG_URL || "http://localhost:3115";
 const SECRET = __ENV.WEBHOOK_SECRET || "segredo-local";
 const FORGED_ONLY = http.expectedStatuses(401);
+// 4xx é resposta esperada para os payloads inválidos; os checks conferem o status exato de cada caso.
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }));
 
 function signed(body) {
   return {
@@ -36,7 +38,7 @@ export const options = {
 };
 
 export function setup() {
-  const list = http.get(`${BASE_URL}/shipments`).json("shipments");
+  const list = http.get(`${BASE_URL}/shipments?limit=200`).json("shipments");
   return list.map((s) => ({ id: s.id, tracker: http.get(`${AGG_URL}/v1/trackers/${s.aggregator_ref}`).json("tracker") }));
 }
 
@@ -51,11 +53,41 @@ function shuffled(items) {
   return copy;
 }
 
+// Payloads que um cliente quebrado ou mal-intencionado mandaria. Todos assinados, para chegar na validação.
+function invalidWebhookBody(target) {
+  const t = target.tracker;
+  const options = [
+    "",
+    "{",
+    "null",
+    "[]",
+    '"texto solto"',
+    JSON.stringify({ tracker: Object.assign({}, t, { checkpoints: "x" }) }),
+    JSON.stringify({ tracker: Object.assign({}, t, { id: 123 }) }),
+    JSON.stringify({ tracker: Object.assign({}, t, { checkpoints: [{ carrier_status: "delivered", checkpoint_time: "1" }] }) }),
+    JSON.stringify({ tracker: Object.assign({}, t, { checkpoints: [{ carrier_status: "   ", checkpoint_time: "2026-10-01T10:00:00Z" }] }) }),
+    JSON.stringify({ tracker: Object.assign({}, t, { checkpoints: [{ carrier_status: "Objeto entregue ao destinatário", checkpoint_time: "2026-10-01T10:00:00" }] }) }),
+  ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+const INVALID_SHIPMENTS = ["", "{", "[]", '{"tracking_code": 1}', '{"tracking_code": "QB 1", "carrier": "correios"}', '{"carrier": {}}'];
+
 export default function (shipments) {
   const target = shipments[Math.floor(Math.random() * shipments.length)];
   const roll = Math.random();
 
-  if (roll < 0.65) {
+  if (roll < 0.1) {
+    let res;
+    if (Math.random() < 0.7) {
+      const body = invalidWebhookBody(target);
+      res = http.post(`${BASE_URL}/webhooks/aggregator`, body, { headers: signed(body), tags: { name: "invalido" } });
+    } else {
+      const body = INVALID_SHIPMENTS[Math.floor(Math.random() * INVALID_SHIPMENTS.length)];
+      res = http.post(`${BASE_URL}/shipments`, body, { headers: { "content-type": "application/json" }, tags: { name: "invalido" } });
+    }
+    check(res, { "payload inválido 400": (r) => r.status === 400 });
+  } else if (roll < 0.65) {
     // Subconjunto embaralhado, com o primeiro evento repetido no fim.
     const subset = shuffled(target.tracker.checkpoints).slice(0, 1 + Math.floor(Math.random() * 3));
     subset.push(subset[0]);

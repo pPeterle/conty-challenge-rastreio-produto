@@ -33,13 +33,16 @@ Variáveis de ambiente:
 | método e rota | o que faz |
 |---|---|
 | `POST /shipments` | cadastra `{ tracking_code, carrier }` no agregador. 201 na primeira vez, 200 com a mesma remessa nas seguintes |
-| `GET /shipments`, `GET /shipments/:id` | remessa com status, histórico, mudanças de status e alertas |
+| `GET /shipments?limit=&offset=` | lista paginada (padrão 50, teto 200), só com o resumo de cada remessa |
+| `GET /shipments/:id` | remessa com status, histórico, mudanças de status e alertas |
 | `POST /shipments/:id/refresh` | polling: busca o histórico no agregador e aplica o que for novo |
 | `POST /webhooks/aggregator` | recebe o payload bruto do agregador, assinado com HMAC |
 | `POST /jobs/check-delays` | job de atraso; pode rodar quantas vezes quiser |
-| `GET /alerts` | alertas registrados |
+| `GET /alerts?limit=&offset=` | alertas registrados, paginados como acima |
 
-Erros seguem `{ "error": { "code", "message" } }`: 400 para validação ou payload inválido, 401 para assinatura ausente ou errada, 404 para remessa ou referência desconhecida, 502 quando o agregador não responde.
+Erros seguem `{ "error": { "code", "message", "details"? } }`: 400 para validação ou payload inválido, 401 para assinatura ausente ou errada, 404 para rota, método, remessa ou referência desconhecida, 413 para corpo acima de 256 KB, 415 para `POST /shipments` sem `content-type: application/json`, 502 quando o agregador não responde. Em erro de validação, `details` lista o caminho e o motivo de cada campo. Erro inesperado vira 500 com mensagem genérica, sem stack trace (o detalhe vai só para o log).
+
+Validação e limites: tudo que entra passa por schema zod. Corpo, query e params da API estão em `src/schemas.ts`, validados com `@hono/zod-validator` e um hook único que monta o erro acima. O payload do agregador (webhook e resposta do polling) e o header de assinatura têm schema em `src/aggregator/fake/schemas.ts`, dentro do adaptador. No webhook, o HMAC é conferido sobre o corpo bruto antes do `JSON.parse` e do schema. Corpo que não é objeto JSON, campo ausente, tipo errado, texto vazio ou longo demais, `tracking_code` com espaço ou unicode, `checkpoint_time` sem fuso e webhook com mais de 500 eventos voltam 400 sem gravar nada. Campos extras são ignorados (`strip`). `limit` e `offset` fora de inteiro na faixa voltam 400. Os casos estão em `test/integration/payloads-invalidos.test.ts`.
 
 ## Como o código está dividido
 
@@ -48,7 +51,8 @@ src/
   domain/status.ts        status normalizado, NormalizedEvent e deriveState (regra pura)
   domain/delay.ts         isDelayed (regra pura)
   aggregator/types.ts     interface TrackingAggregator: register, getTracking, parseWebhook
-  aggregator/fake/        cliente HTTP do agregador fictício, tradução dos dialetos e assinatura
+  schemas.ts, validation.ts  schemas zod da API e mensagens de erro em português
+  aggregator/fake/        cliente HTTP do agregador fictício, schemas do formato bruto, tradução dos dialetos e assinatura
   fake-aggregator/        o agregador fictício em si (app Hono em memória)
   service.ts              orquestra: grava eventos, recalcula status, roda o job de atraso
   db.ts                   todo o acesso ao sqlite
@@ -110,11 +114,11 @@ Payload bruto que o agregador fictício devolveu numa execução real (`GET /v1/
 }
 ```
 
-A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HOURS=72`, consultada em 2026-10-10 por volta de 03:55 UTC):
+A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HOURS=72`, consultada em 2026-10-10 por volta de 03:59 UTC):
 
 ```json
 {
-  "id": "shp_a7cdbcda-506e-413d-9370-a1e60e2bde49",
+  "id": "shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682",
   "carrier": "correios",
   "tracking_code": "QB123456789BR",
   "aggregator_ref": "trk_1",
@@ -129,7 +133,7 @@ A mesma remessa depois de normalizada (`GET /shipments/:id`, com `DELAY_LIMIT_HO
     { "status": "em_transito", "raw_code": "Objeto em trânsito - por favor aguarde", "description": "de Unidade de Tratamento, Cajamar/SP para Unidade de Distribuição, Curitiba/PR", "location": "Cajamar/SP", "occurred_at": "2026-10-08T12:12:00.000Z" },
     { "status": "desconhecido", "raw_code": "Objeto aguardando conferência na unidade", "description": null, "location": "Curitiba/PR", "occurred_at": "2026-10-09T10:30:00.000Z" }
   ],
-  "status_changes": [{ "from": null, "to": "em_transito", "at": "2026-10-10T03:55:15.695Z" }],
+  "status_changes": [{ "from": null, "to": "em_transito", "at": "2026-10-10T03:59:07.562Z" }],
   "alerts": []
 }
 ```
@@ -208,6 +212,7 @@ O agregador assina o corpo bruto com HMAC-SHA256 e manda `x-aggregator-signature
 | agregador trocável | `test/integration/swap-aggregator.test.ts`, `test/unit/boundary.test.ts` |
 | concorrência | `test/integration/concurrency.test.ts` (80 webhooks e polls simultâneos, repetidos e embaralhados) |
 | assinatura do webhook | `test/integration/webhook-signature.test.ts` |
+| payloads inválidos e limites | `test/integration/payloads-invalidos.test.ts` |
 
 ## Exemplos reais com curl
 
@@ -221,7 +226,7 @@ curl -s -X POST localhost:3105/shipments -H 'content-type: application/json' \
 ```
 
 ```json
-{"id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
+{"id":"shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
 ```
 
 Repetir o mesmo cadastro devolve 200 com a mesma remessa.
@@ -249,7 +254,7 @@ curl -s -X POST localhost:3105/webhooks/aggregator -H 'content-type: application
 ```
 
 ```json
-{"new_events":0,"shipment_id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","status":"em_transito"}
+{"new_events":0,"shipment_id":"shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682","status":"em_transito"}
 ```
 
 Webhook forjado dizendo "entregue", sem assinatura (401) e com a assinatura de outro corpo (401):
@@ -266,8 +271,8 @@ curl -s -X POST localhost:3105/jobs/check-delays
 ```
 
 ```json
-{"checked":1,"delayed":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"],"alerts_created":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"]}
-{"checked":1,"delayed":["shp_a7cdbcda-506e-413d-9370-a1e60e2bde49"],"alerts_created":[]}
+{"checked":1,"delayed":["shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682"],"alerts_created":["shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682"]}
+{"checked":1,"delayed":["shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682"],"alerts_created":[]}
 ```
 
 ```bash
@@ -275,13 +280,13 @@ curl -s localhost:3105/alerts
 ```
 
 ```json
-{"alerts":[{"id":1,"shipment_id":"shp_a7cdbcda-506e-413d-9370-a1e60e2bde49","kind":"atraso","details":{"status":"em_transito","needs_review":true,"transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":80.3,"limit_hours":72},"created_at":"2026-10-10T03:55:15.927Z"}]}
+{"limit":50,"offset":0,"alerts":[{"id":1,"shipment_id":"shp_4b4ba4cb-d498-4fd6-a1f8-75ec35856682","kind":"atraso","details":{"status":"em_transito","needs_review":true,"transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":80.3,"limit_hours":72},"created_at":"2026-10-10T03:59:07.709Z"}]}
 ```
 
-Validação:
+Validação (`POST /shipments` com `{"tracking_code":"x"}`):
 
 ```json
-{"error":{"code":"validacao","message":"tracking_code é obrigatório (4 a 40 letras, números ou hífen)"}}
+{"error":{"code":"validacao","message":"tracking_code: precisa ter de 4 a 40 letras, números ou hífen (e mais 1 problema(s))","details":[{"path":"tracking_code","message":"precisa ter de 4 a 40 letras, números ou hífen"},{"path":"carrier","message":"campo obrigatório"}]}}
 ```
 
 ## Idempotência e concorrência
@@ -303,23 +308,24 @@ Com várias instâncias, o caminho seria Postgres com as mesmas restrições UNI
 
 ## Teste de carga
 
-`npm run load` sobe API e agregador com banco temporário, cadastra 40 remessas em 4 cenários (entrega normal, atrasada com status inventado, exceção resolvida, exceção em aberto) e roda o k6 (`load/tracking.js`) por 30 s com até 50 VUs. Cada iteração escolhe uma remessa e faz uma de quatro coisas: webhook assinado com um subconjunto embaralhado dos eventos e um evento repetido (65%), webhook forjado dizendo "entregue" com assinatura errada, que precisa voltar 401 (5%), polling (25%) ou o job de atraso (5%). No fim, `scripts/verify-load.ts` confere para cada remessa a quantidade de eventos, a ausência de duplicatas, o status final, `needs_review`, a quantidade de alertas e se alguma mudança de status regrediu. Se algo quebrar, sai com código 1.
+`npm run load` sobe API e agregador com banco temporário, cadastra 40 remessas em 4 cenários (entrega normal, atrasada com status inventado, exceção resolvida, exceção em aberto) e roda o k6 (`load/tracking.js`) por 30 s com até 50 VUs. Cada iteração escolhe uma remessa e faz uma de cinco coisas: payload inválido assinado (JSON quebrado, tipos errados, data sem fuso) no webhook ou no cadastro, que precisa voltar 400 (10%); webhook assinado com um subconjunto embaralhado dos eventos e um evento repetido (55%); webhook forjado dizendo "entregue" com assinatura errada, que precisa voltar 401 (5%); polling (25%); ou o job de atraso (5%). Para o k6, 4xx conta como resposta esperada, e os checks conferem o status exato de cada caso. No fim, `scripts/verify-load.ts` confere para cada remessa a quantidade de eventos, a ausência de duplicatas, o status final, `needs_review`, a quantidade de alertas e se alguma mudança de status regrediu. Se algo quebrar, sai com código 1.
 
 Resultado da última execução real na minha máquina (macOS, k6 0.54.0 no Docker):
 
 ```
+     ✓ payload inválido 400
      ✓ webhook 200
-     ✓ webhook forjado 401
-     ✓ refresh 200
      ✓ check-delays 200
-   ✓ checks.........................: 100.00% 47855 out of 47855
-   ✓ http_req_duration..............: avg=26.18ms min=301.45µs med=16.14ms max=485.65ms p(90)=62.68ms p(95)=85.01ms
-   ✓ http_req_failed................: 0.00%   0 out of 47896
-     http_reqs......................: 47896   1594.289013/s
+     ✓ refresh 200
+     ✓ webhook forjado 401
+   ✓ checks.........................: 100.00% 57695 out of 57695
+   ✓ http_req_duration..............: avg=21.69ms min=256.83µs med=12.83ms max=705.58ms p(90)=48.25ms p(95)=63.5ms
+   ✓ http_req_failed................: 0.00%   0 out of 57736
+     http_reqs......................: 57736   1921.024433/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 
-Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números variam bastante entre execuções: uma rodada anterior, com o mesmo cenário, fez 4731 req/s com p95 de 23,91 ms.
+Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números variam bastante entre execuções na mesma máquina. Nas rodadas que fiz ao longo do desenvolvimento (as primeiras ainda sem payloads inválidos no cenário), a vazão ficou entre 1594 e 4731 req/s e o p95 entre 23,91 ms e 85,01 ms.
 
 ## O que ficou de fora
 

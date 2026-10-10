@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { EventStatus, NormalizedEvent } from "../../domain/status.ts";
-import type { RawCheckpoint } from "./raw.ts";
+import type { RawCheckpoint } from "./schemas.ts";
 
 function normalizeText(value: string): string {
   return value
