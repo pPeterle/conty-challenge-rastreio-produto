@@ -15,6 +15,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     if (!Number.isFinite(hours) || hours <= 0) throw new Error(`${key} precisa ser um número positivo`);
     delayLimitByCarrierMs.set(match[1].toLowerCase(), hours * HOUR);
   }
+  const contentDueDays = Number(env.CONTENT_DUE_DAYS ?? 7);
+  if (!Number.isInteger(contentDueDays) || contentDueDays <= 0) {
+    throw new Error("CONTENT_DUE_DAYS precisa ser um inteiro positivo");
+  }
   const toleranceMinutes = Number(env.FUTURE_TOLERANCE_MINUTES ?? 10);
   if (!Number.isFinite(toleranceMinutes) || toleranceMinutes < 0) {
     throw new Error("FUTURE_TOLERANCE_MINUTES precisa ser um número maior ou igual a zero");
@@ -35,6 +39,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       delayLimitMs: limitHours * HOUR,
       delayLimitByCarrierMs,
       futureToleranceMs: toleranceMinutes * 60_000,
+      contentDueDays,
     },
   };
 }

@@ -6,7 +6,7 @@ import {
   type TrackingAggregator, type TrackingUpdate, type WebhookRequest } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { Db, EventRow, ShipmentRow } from "./db.ts";
-import { isDelayed } from "./domain/delay.ts";
+import { contentDueAt, isDelayed } from "./domain/delay.ts";
 import { deriveState, isTooFarInFuture, type NormalizedEvent, type StoredEvent } from "./domain/status.ts";
 
 export interface TrackingConfig {
@@ -14,11 +14,14 @@ export interface TrackingConfig {
   delayLimitMs: number;
   /** Limite por transportadora; quem não está aqui usa o global. */
   delayLimitByCarrierMs?: ReadonlyMap<string, number>;
+  /** Dias corridos, contados da entrega, para o criador publicar o conteúdo. Padrão: 7. */
+  contentDueDays?: number;
   /** Quanto um evento pode estar à frente do relógio antes de ser ignorado. Padrão: 10 minutos. */
   futureToleranceMs?: number;
 }
 
 export const DEFAULT_FUTURE_TOLERANCE_MS = 10 * 60_000;
+export const DEFAULT_CONTENT_DUE_DAYS = 7;
 
 export class NotFoundError extends Error {}
 
@@ -149,6 +152,11 @@ export class TrackingService {
       });
       return { shipment: this.db.findShipment(shipmentId)!, newEvents };
     });
+  }
+
+  contentDueAt(shipment: ShipmentRow): string | null {
+    const deliveredAt = shipment.delivered_at ? new Date(shipment.delivered_at) : null;
+    return iso(contentDueAt(deliveredAt, this.config.contentDueDays ?? DEFAULT_CONTENT_DUE_DAYS));
   }
 
   delayLimitFor(carrier: string): number {

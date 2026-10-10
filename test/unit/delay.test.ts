@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDelayed } from "../../src/domain/delay.ts";
+import { contentDueAt, isDelayed } from "../../src/domain/delay.ts";
 
 const HOUR = 3_600_000;
 const LIMIT = 72 * HOUR;
@@ -29,5 +29,15 @@ describe("isDelayed", () => {
 
   it("sem nenhum evento o relógio não começou", () => {
     expect(isDelayed({ status: null, transitStartedAt: null }, at(LIMIT * 10), LIMIT)).toBe(false);
+  });
+});
+
+describe("contentDueAt", () => {
+  it("conta os dias a partir do instante da entrega", () => {
+    expect(contentDueAt(new Date("2026-10-03T15:00:00Z"), 7)).toEqual(new Date("2026-10-10T15:00:00Z"));
+  });
+
+  it("sem entrega não há prazo", () => {
+    expect(contentDueAt(null, 7)).toBeNull();
   });
 });

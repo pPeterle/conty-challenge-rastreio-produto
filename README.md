@@ -24,6 +24,7 @@ npm run load         # sobe tudo com banco temporário, roda k6 no Docker e veri
 | `DB_PATH` | `rastreio.db` | arquivo sqlite |
 | `DELAY_LIMIT_HOURS` | `168` | limite de tempo em trânsito antes do alerta (7 dias, valor que escolhi sem base em dado real) |
 | `DELAY_LIMIT_HOURS_<TRANSPORTADORA>` | o global | limite só para aquela transportadora, ex. `DELAY_LIMIT_HOURS_CORREIOS=120` |
+| `CONTENT_DUE_DAYS` | `7` | dias corridos, contados da entrega, para o prazo do conteúdo (`content_due_at`); valor que escolhi sem base em dado real |
 | `FUTURE_TOLERANCE_MINUTES` | `10` | quanto um evento pode estar à frente do relógio antes de ser ignorado no cálculo |
 | `AGGREGATOR_URL` | `http://localhost:3115` | onde está o agregador |
 | `AGGREGATOR_WEBHOOK_SECRET` | `segredo-local` fora de produção | segredo do HMAC do webhook; obrigatório com `NODE_ENV=production` |
@@ -209,7 +210,9 @@ Polling e webhook também conferem se a referência, a transportadora e o códig
 
 O "agora" vem do `Clock` injetado, então os testes controlam a data. No limite exato ainda não é atraso, e um milissegundo depois já é. Entrega normal não vira atraso porque `entregue` sai da conta, por mais tempo que passe depois. Uma `excecao` em aberto continua contando, já que o pacote ainda não chegou.
 
-`POST /jobs/check-delays` percorre as remessas em trânsito. Antes de criar um alerta novo, ele reconsulta o agregador para aquela remessa, porque o webhook da entrega pode ter se perdido. Se a reconsulta mostrar a entrega, não há alerta. Se ela falhar, o alerta é criado com `stale: true` (a informação pode estar desatualizada). Remessa que já tem alerta não é reconsultada. Os alertas ficam em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
+`POST /jobs/check-delays` percorre as remessas em trânsito. Antes de criar um alerta novo, ele reconsulta o agregador para aquela remessa, porque o webhook da entrega pode ter se perdido. Se a reconsulta mostrar a entrega, não há alerta. Se ela falhar, o alerta é criado com `stale: true` (a informação pode estar desatualizada). Remessa que já tem alerta não é reconsultada. Os alertas ficam em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. A remessa entregue devolve `content_due_at`, o prazo do conteúdo do criador contado a partir da entrega (`CONTENT_DUE_DAYS`, padrão 7 dias). Antes da entrega o campo é `null`, porque o prazo só faz sentido com o produto na mão.
+
+Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
 
 ### Autenticação do webhook
 

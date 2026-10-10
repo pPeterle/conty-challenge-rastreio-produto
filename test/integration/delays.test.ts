@@ -238,3 +238,18 @@ describe("limite de atraso por transportadora", () => {
     expect((await t.call("POST", "/jobs/check-delays")).body.alerts_created).toEqual([correios.id]);
   });
 });
+
+describe("prazo do conteúdo", () => {
+  it("remessa entregue devolve content_due_at contado da entrega; antes disso é null", async () => {
+    const t = setup({ now: "2026-10-03T16:00:00Z" });
+    const s = await t.register();
+    await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-01T12:00:00Z");
+    const before = (await t.call("POST", `/shipments/${s.id}/refresh`)).body.shipment;
+    expect(before.content_due_at).toBeNull();
+
+    await t.carrierEvent(s.aggregator_ref, "Objeto entregue ao destinatário", "2026-10-03T15:00:00Z");
+    const after = (await t.call("POST", `/shipments/${s.id}/refresh`)).body.shipment;
+    expect(after).toMatchObject({ status: "entregue", content_due_at: "2026-10-10T15:00:00.000Z" });
+    expect((await t.call("GET", "/shipments")).body.shipments[0].content_due_at).toBe("2026-10-10T15:00:00.000Z");
+  });
+});

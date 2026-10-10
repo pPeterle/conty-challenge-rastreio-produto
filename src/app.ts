@@ -80,6 +80,7 @@ export function createApp(deps: AppDeps) {
     status_since: row.status_since,
     transit_started_at: row.transit_started_at,
     delivered_at: row.delivered_at,
+    content_due_at: service.contentDueAt(row),
     delayed: service.isDelayed(row),
     needs_review: row.needs_review === 1,
   });
@@ -93,6 +94,7 @@ export function createApp(deps: AppDeps) {
     status_since: row.status_since,
     transit_started_at: row.transit_started_at,
     delivered_at: row.delivered_at,
+    content_due_at: service.contentDueAt(row),
     delayed: service.isDelayed(row),
     needs_review: row.needs_review === 1,
     events: db.listEvents(row.id).map((e) => ({

@@ -14,3 +14,13 @@ export function isDelayed(input: DelayInput, now: Date, limitMs: number): boolea
   if (input.status === "entregue" || input.transitStartedAt === null) return false;
   return now.getTime() - input.transitStartedAt.getTime() > limitMs;
 }
+
+const DAY = 86_400_000;
+
+/**
+ * Prazo do conteúdo do criador: só começa quando o produto chega. Sem entrega,
+ * não há prazo. Dias corridos a partir do instante da entrega.
+ */
+export function contentDueAt(deliveredAt: Date | null, days: number): Date | null {
+  return deliveredAt ? new Date(deliveredAt.getTime() + days * DAY) : null;
+}
