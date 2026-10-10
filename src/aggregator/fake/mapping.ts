@@ -72,9 +72,9 @@ export function toNormalizedEvent(carrier: string, checkpoint: RawCheckpoint): N
   const occurredAt = new Date(checkpoint.checkpoint_time);
   const location = checkpoint.location?.trim() || null;
   const rawCode = checkpoint.carrier_status.trim();
-  // Sem id do agregador, a identidade do evento é o que ele descreve: quando, o quê e onde.
+  // Sem id do agregador (ou com id vazio), a identidade do evento é o que ele descreve: quando, o quê e onde.
   const key =
-    checkpoint.checkpoint_id ??
+    checkpoint.checkpoint_id?.trim() ||
     "h:" +
       createHash("sha256")
         .update(`${occurredAt.toISOString()}|${rawCode}|${location ?? ""}`)

@@ -4,6 +4,22 @@ import { z } from "../../validation.ts";
 
 export const MAX_CHECKPOINTS = 500;
 
+/** Ida e volta pelo calendário: 2026-02-30 vira 2026-03-02 no Date, e isso denuncia a data inexistente. */
+export function isRealCalendarDate(value: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!m) return false;
+  const [y, mo, d, h, mi, s] = m.slice(1).map((part) => (part === undefined ? 0 : Number(part)));
+  const date = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === mo - 1 &&
+    date.getUTCDate() === d &&
+    date.getUTCHours() === h &&
+    date.getUTCMinutes() === mi &&
+    date.getUTCSeconds() === s
+  );
+}
+
 export const rawCheckpointSchema = z.object({
   checkpoint_id: z.string().trim().min(1).max(100).optional(),
   carrier_status: z.string().trim().min(1).max(200),
@@ -13,7 +29,11 @@ export const rawCheckpointSchema = z.object({
   checkpoint_time: z
     .string()
     .datetime({ offset: true })
-    .refine((v) => !Number.isNaN(Date.parse(v)), "data inexistente"),
+    // Só confere o calendário quando o formato já passou; senão o erro do formato basta.
+    .refine(
+      (v) => !/^\d{4}-\d{2}-\d{2}T/.test(v) || (isRealCalendarDate(v) && !Number.isNaN(Date.parse(v))),
+      "data inexistente no calendário",
+    ),
 });
 
 export const rawTrackerSchema = z.object({

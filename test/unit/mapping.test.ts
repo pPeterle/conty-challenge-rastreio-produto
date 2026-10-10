@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mapCarrierStatus, toNormalizedEvent } from "../../src/aggregator/fake/mapping.ts";
+import { isRealCalendarDate, rawCheckpointSchema } from "../../src/aggregator/fake/schemas.ts";
 
 describe("tradução do dialeto de cada transportadora", () => {
   it.each([
@@ -80,5 +81,36 @@ describe("tradução do dialeto de cada transportadora", () => {
     expect(d.key).toBe(a.key);
     expect(d.rawCode).toBe("TRANSFERENCIA");
     expect(a.key).not.toBe(c.key);
+  });
+});
+
+describe("identidade e data do checkpoint", () => {
+  it.each(["", "   "])("checkpoint_id %j é tratado como ausente e cai no hash", (id) => {
+    const raw = { checkpoint_id: id, carrier_status: "Objeto postado", checkpoint_time: "2026-10-01T10:00:00Z" };
+    const withEmpty = toNormalizedEvent("correios", raw);
+    const withoutId = toNormalizedEvent("correios", { ...raw, checkpoint_id: undefined });
+    expect(withEmpty.key).toBe(withoutId.key);
+    expect(withEmpty.key.startsWith("h:")).toBe(true);
+  });
+
+  it("schema recusa checkpoint_id vazio ou só espaços", () => {
+    for (const id of ["", "   "]) {
+      const result = rawCheckpointSchema.safeParse({ checkpoint_id: id, carrier_status: "x", checkpoint_time: "2026-10-01T10:00:00Z" });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it.each(["2026-02-30T12:00:00Z", "2026-02-29T12:00:00Z", "2026-04-31T00:00:00-03:00", "2026-00-10T00:00:00Z"])(
+    "%s não existe no calendário",
+    (value) => {
+      expect(isRealCalendarDate(value)).toBe(false);
+      const result = rawCheckpointSchema.safeParse({ carrier_status: "x", checkpoint_time: value });
+      expect(result.success).toBe(false);
+    },
+  );
+
+  it.each(["2028-02-29T12:00:00Z", "2026-12-31T23:59:59-03:00", "2026-10-01T10:00Z"])("%s existe", (value) => {
+    expect(isRealCalendarDate(value)).toBe(true);
+    expect(rawCheckpointSchema.safeParse({ carrier_status: "x", checkpoint_time: value }).success).toBe(true);
   });
 });
