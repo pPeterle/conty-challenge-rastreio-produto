@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import pino from "pino";
+import { describe, expect, it } from "vitest";
 import { MAX_CHECKPOINTS } from "../../src/aggregator/fake/schemas.ts";
 import { SIGNATURE_HEADER, signBody } from "../../src/aggregator/fake/signature.ts";
 import { MAX_BODY_BYTES } from "../../src/app.ts";
@@ -283,9 +284,10 @@ describe("rotas, ids e paginação", () => {
     expect(page.json.shipments[0].events).toBeUndefined();
   });
 
-  it("erro inesperado vira 500 genérico, sem detalhe interno", async () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("erro inesperado vira 500 genérico, sem detalhe interno, e o erro vai para o logger", async () => {
+    const lines: string[] = [];
     const t = setup({
+      logger: pino({ level: "info" }, { write: (line: string) => void lines.push(line) }),
       aggregator: {
         supportedCarriers: ["correios"],
         mapStatus: () => "desconhecido",
@@ -302,7 +304,9 @@ describe("rotas, ids e paginação", () => {
     expect(res.status).toBe(500);
     expect(res.json).toEqual({ error: { code: "erro_interno", message: "erro inesperado" } });
     expect(res.text).not.toContain("senha");
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+    expect(lines).toHaveLength(1);
+    const entry = JSON.parse(lines[0]!);
+    expect(entry).toMatchObject({ level: 50, msg: "erro inesperado", method: "POST", path: "/shipments" });
+    expect(entry.err.message).toBe("detalhe interno: senha do banco");
   });
 });

@@ -5,6 +5,7 @@ import { createApp } from "../../src/app.ts";
 import { FixedClock } from "../../src/clock.ts";
 import { Db } from "../../src/db.ts";
 import { createFakeAggregatorApp } from "../../src/fake-aggregator/app.ts";
+import type { Logger } from "../../src/logger.ts";
 
 export const HOUR = 3_600_000;
 const AGG = "http://agregador.test";
@@ -16,6 +17,7 @@ export function setup(
     delayLimitHoursByCarrier?: Record<string, number>;
     now?: string;
     aggregator?: TrackingAggregator;
+    logger?: Logger;
   } = {},
 ) {
   const fake = createFakeAggregatorApp();
@@ -35,6 +37,7 @@ export function setup(
         Object.entries(options.delayLimitHoursByCarrier ?? {}).map(([carrier, hours]) => [carrier, hours * HOUR]),
       ),
     },
+    logger: options.logger,
   });
 
   async function call(method: string, path: string, body?: unknown) {

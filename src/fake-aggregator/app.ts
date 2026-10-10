@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "../validation.ts";
 import { rawCheckpointSchema, registerTrackerSchema, type RawCheckpoint, type RawTracker } from "../aggregator/fake/schemas.ts";
 import { SIGNATURE_HEADER, signBody } from "../aggregator/fake/signature.ts";
+import { silentLogger, type Logger } from "../logger.ts";
 
 export interface FakeAggregatorOptions {
   /** Se configurado, cada checkpoint novo dispara um webhook assinado com o histórico completo. */
@@ -9,6 +10,8 @@ export interface FakeAggregatorOptions {
     secret: string;
     send(body: string, headers: Record<string, string>): Promise<unknown>;
   };
+  /** Padrão: silencioso (testes). */
+  logger?: Logger;
 }
 
 /**
@@ -22,7 +25,13 @@ export function createFakeAggregatorApp(options: FakeAggregatorOptions = {}) {
   let seq = 0;
   let checkpointSeq = 0;
 
+  const logger = options.logger ?? silentLogger;
   const app = new Hono();
+  // Sem isto o Hono escreveria o erro com console.error.
+  app.onError((err, c) => {
+    logger.error({ err, method: c.req.method, path: c.req.path }, "erro inesperado no agregador fictício");
+    return c.json({ message: "internal error" }, 500);
+  });
 
   app.post("/v1/trackers", async (c) => {
     const parsed = registerTrackerSchema.safeParse(await c.req.json().catch(() => null));
@@ -67,7 +76,7 @@ export function createFakeAggregatorApp(options: FakeAggregatorOptions = {}) {
       // Um serviço real tentaria de novo; aqui a falha de entrega só é registrada.
       await options.webhook
         .send(payload, { "content-type": "application/json", [SIGNATURE_HEADER]: signBody(payload, options.webhook.secret) })
-        .catch((error) => console.warn(`webhook não entregue: ${(error as Error).message}`));
+        .catch((error) => logger.warn({ tracker: tracker.id, motivo: (error as Error).message }, "webhook não entregue"));
     }
     return c.json({ checkpoint }, 201);
   });

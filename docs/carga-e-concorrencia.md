@@ -38,7 +38,7 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
 
 ### Resultado
 
-Última execução real, nesta máquina (macOS, k6 0.54.0 no Docker, 2026-10-10, load average perto de 7):
+Última execução real, nesta máquina (macOS, k6 0.54.0 no Docker, 2026-10-10, load average perto de 13):
 
 ```
      ✓ refresh 200
@@ -46,10 +46,10 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
      ✓ payload inválido 400
      ✓ webhook forjado 401
      ✓ check-delays 200
-   ✓ checks.........................: 100.00% 160565 out of 160565
-   ✓ http_req_duration..............: avg=7.8ms   min=99.79µs  med=5.06ms  max=63.4ms   p(90)=19.45ms p(95)=22.11ms
-   ✓ http_req_failed................: 0.00%   0 out of 160606
-     http_reqs......................: 160606  5351.111363/s
+   ✓ checks.........................: 100.00% 155957 out of 155957
+   ✓ http_req_duration..............: avg=8.03ms  min=98.7µs   med=5.18ms  max=62.84ms  p(90)=19.92ms p(95)=22.58ms
+   ✓ http_req_failed................: 0.00%   0 out of 155998
+     http_reqs......................: 155998  5196.962636/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 

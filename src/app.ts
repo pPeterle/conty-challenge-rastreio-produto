@@ -12,6 +12,7 @@ import {
 } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { AlertRow, Db, ShipmentRow } from "./db.ts";
+import { silentLogger, type Logger } from "./logger.ts";
 import { alertsQuery, createShipmentBody, pageQuery, shipmentIdParam } from "./schemas.ts";
 import { NotFoundError, TrackingService, type TrackingConfig } from "./service.ts";
 import { issuesOf, summarize, type FieldIssue } from "./validation.ts";
@@ -21,6 +22,8 @@ export interface AppDeps {
   clock: Clock;
   aggregator: TrackingAggregator;
   config: TrackingConfig;
+  /** Padrão: logger silencioso (testes). O servidor passa o de `createLogger`. */
+  logger?: Logger;
 }
 
 type ErrorStatus = 400 | 401 | 404 | 413 | 415 | 502;
@@ -61,6 +64,7 @@ function alertView(row: AlertRow) {
 
 export function createApp(deps: AppDeps) {
   const { db } = deps;
+  const logger = deps.logger ?? silentLogger;
   const service = new TrackingService(deps.db, deps.clock, deps.aggregator, deps.config);
   const app = new Hono();
   const supported = deps.aggregator.supportedCarriers;
@@ -121,7 +125,7 @@ export function createApp(deps: AppDeps) {
     if (error instanceof AggregatorResponseError) {
       return fail(c, 502, "agregador_resposta_invalida", error.message, error.details);
     }
-    console.error(error);
+    logger.error({ err: error, method: c.req.method, path: c.req.path }, "erro inesperado");
     return c.json({ error: { code: "erro_interno", message: "erro inesperado" } }, 500);
   });
 

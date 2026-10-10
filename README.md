@@ -27,6 +27,7 @@ npm run load         # sobe tudo com banco temporário, roda k6 no Docker e veri
 | `FUTURE_TOLERANCE_MINUTES` | `10` | quanto um evento pode estar à frente do relógio antes de ser ignorado no cálculo |
 | `AGGREGATOR_URL`, `AGGREGATOR_WEBHOOK_SECRET` | `http://localhost:3115`, `segredo-local` | agregador e segredo do HMAC; o segredo é obrigatório com `NODE_ENV=production` |
 | `START_FAKE_AGGREGATOR`, `FAKE_AGGREGATOR_PORT` | `true`, `3115` | sobe o agregador fictício junto com a API |
+| `LOG_LEVEL` | `info` | nível do log (JSON pelo pino, com transporte em worker thread; nos testes o logger é silencioso) |
 
 ## Rotas
 
@@ -160,13 +161,13 @@ Para o volume esperado aqui (remessas por campanha, poucos eventos por pacote, w
 
 ## Teste de carga
 
-`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real, nesta máquina (2026-10-10, load average perto de 7):
+`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real, nesta máquina (2026-10-10, load average perto de 13):
 
 ```
-   ✓ checks.........................: 100.00% 160565 out of 160565
-   ✓ http_req_duration..............: avg=7.8ms   min=99.79µs  med=5.06ms  max=63.4ms   p(90)=19.45ms p(95)=22.11ms
-   ✓ http_req_failed................: 0.00%   0 out of 160606
-     http_reqs......................: 160606  5351.111363/s
+   ✓ checks.........................: 100.00% 155957 out of 155957
+   ✓ http_req_duration..............: avg=8.03ms  min=98.7µs   med=5.18ms  max=62.84ms  p(90)=19.92ms p(95)=22.58ms
+   ✓ http_req_failed................: 0.00%   0 out of 155998
+     http_reqs......................: 155998  5196.962636/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 
