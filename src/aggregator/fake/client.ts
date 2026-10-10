@@ -7,7 +7,7 @@ import {
   type TrackingUpdate,
   type WebhookRequest,
 } from "../types.ts";
-import { toNormalizedEvent } from "./mapping.ts";
+import { SUPPORTED_CARRIERS, toNormalizedEvent } from "./mapping.ts";
 import { isValidSignature, SIGNATURE_HEADER } from "./signature.ts";
 import { issuesOf, summarize } from "../../validation.ts";
 import { rawEnvelopeSchema, signatureSchema, type RawTracker } from "./schemas.ts";
@@ -47,6 +47,7 @@ function toUpdate(tracker: RawTracker): TrackingUpdate {
 }
 
 export class FakeAggregatorClient implements TrackingAggregator {
+  readonly supportedCarriers = SUPPORTED_CARRIERS;
   private readonly baseUrl: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;

@@ -8,6 +8,7 @@ import { setup } from "./helpers.ts";
  * dentro do teste. Se o domínio dependesse do formato do fictício, isto quebraria.
  */
 class OtherAggregator implements TrackingAggregator {
+  readonly supportedCarriers = ["qualquer"];
   private codes = new Map<string, string>();
 
   async register(input: { trackingCode: string }) {

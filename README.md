@@ -32,7 +32,7 @@ Variáveis de ambiente:
 
 | método e rota | o que faz |
 |---|---|
-| `POST /shipments` | cadastra `{ tracking_code, carrier }` no agregador. 201 na primeira vez, 200 com a mesma remessa nas seguintes |
+| `POST /shipments` | cadastra `{ tracking_code, carrier }` no agregador. 201 na primeira vez, 200 com a mesma remessa nas seguintes. `carrier` precisa ser uma das transportadoras que o adaptador traduz (`correios`, `jadlog`, `loggi`), senão 400 |
 | `GET /shipments?limit=&offset=` | lista paginada (padrão 50, teto 200), só com o resumo de cada remessa |
 | `GET /shipments/:id` | remessa com status, histórico, mudanças de status e alertas |
 | `POST /shipments/:id/refresh` | polling: busca o histórico no agregador e aplica o que for novo |

@@ -5,6 +5,8 @@ import type { NormalizedEvent } from "../domain/status.ts";
  * outra implementação desta interface; o resto do código não muda.
  */
 export interface TrackingAggregator {
+  /** Transportadoras cujo dialeto este agregador sabe traduzir. Cadastro fora da lista é recusado. */
+  readonly supportedCarriers: readonly string[];
   /** Cadastra o código no agregador e devolve a referência dele. Deve ser idempotente. */
   register(input: { trackingCode: string; carrier: string }): Promise<{ ref: string }>;
   /** Consulta o histórico completo (polling). */

@@ -42,6 +42,18 @@ describe("cadastro de código de rastreio", () => {
     expect(res.body.error).toMatchObject({ code: "validacao" });
   });
 
+  it.each(["fedex", "dhl", "correio"])("transportadora %s fora da lista do adaptador responde 400 sem chamar o agregador", async (carrier) => {
+    const t = setup();
+    const res = await t.call("POST", "/shipments", { tracking_code: "QB123456789BR", carrier });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({
+      code: "validacao",
+      details: [{ path: "carrier", message: "transportadora não suportada; use uma de: correios, jadlog, loggi" }],
+    });
+    expect((await t.call("GET", "/shipments")).body.shipments).toEqual([]);
+    expect((await t.rawTrackerStatus("trk_1"))).toBe(404);
+  });
+
   it("remessa inexistente responde 404", async () => {
     const t = setup();
     expect((await t.call("GET", "/shipments/shp_nao_existe")).status).toBe(404);
@@ -51,6 +63,7 @@ describe("cadastro de código de rastreio", () => {
   it("agregador fora do ar responde 502 sem quebrar a API", async () => {
     const t = setup({
       aggregator: {
+        supportedCarriers: ["correios"],
         register: async () => {
           throw new AggregatorUnavailableError("agregador inacessível");
         },

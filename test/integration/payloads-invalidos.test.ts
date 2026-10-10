@@ -287,6 +287,7 @@ describe("rotas, ids e paginação", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const t = setup({
       aggregator: {
+        supportedCarriers: ["correios"],
         register: async () => {
           throw new Error("detalhe interno: senha do banco");
         },

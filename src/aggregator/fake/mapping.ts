@@ -54,6 +54,8 @@ const LOGGI_CODES: Record<string, EventStatus> = {
   returned_to_sender: "excecao",
 };
 
+export const SUPPORTED_CARRIERS = ["correios", "jadlog", "loggi"] as const;
+
 /** Qualquer código fora das tabelas vira `desconhecido`, nunca um palpite. */
 export function mapCarrierStatus(carrier: string, carrierStatus: string): EventStatus {
   switch (carrier.toLowerCase()) {

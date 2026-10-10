@@ -63,5 +63,9 @@ export function setup(options: { delayLimitHours?: number; now?: string; aggrega
     return (await res.json()) as any;
   }
 
-  return { app, db, clock, fake, call, webhook, register, carrierEvent, rawTracker };
+  async function rawTrackerStatus(ref: string) {
+    return (await fake.request(`${AGG}/v1/trackers/${ref}`)).status;
+  }
+
+  return { app, db, clock, fake, call, webhook, register, rawTrackerStatus, carrierEvent, rawTracker };
 }

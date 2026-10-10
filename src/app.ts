@@ -55,6 +55,12 @@ export function createApp(deps: AppDeps) {
   const { db } = deps;
   const service = new TrackingService(deps.db, deps.clock, deps.aggregator, deps.config);
   const app = new Hono();
+  const supported = deps.aggregator.supportedCarriers;
+  // A lista vem do adaptador: só ele sabe quais dialetos consegue traduzir.
+  const createShipment = createShipmentBody.refine((body) => supported.includes(body.carrier), {
+    path: ["carrier"],
+    message: `transportadora não suportada; use uma de: ${supported.join(", ")}`,
+  });
 
   // Resumo para listagens: sem histórico, para não fazer uma consulta por remessa.
   const shipmentSummary = (row: ShipmentRow) => ({
@@ -120,7 +126,7 @@ export function createApp(deps: AppDeps) {
 
   app.get("/health", (c) => c.json({ ok: true }));
 
-  app.post("/shipments", requireJson, zValidator("json", createShipmentBody, onInvalid), async (c) => {
+  app.post("/shipments", requireJson, zValidator("json", createShipment, onInvalid), async (c) => {
     const { tracking_code: trackingCode, carrier } = c.req.valid("json");
     const { shipment, created } = await service.register({ carrier, trackingCode });
     return c.json(shipmentView(shipment), created ? 201 : 200);
