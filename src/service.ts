@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   AggregatorResponseError,
+  AggregatorUnavailableError,
   InvalidPayloadError,
   type TrackingAggregator, type TrackingUpdate, type WebhookRequest } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
@@ -159,15 +160,35 @@ export class TrackingService {
     );
   }
 
-  /** Job de atraso. Pode rodar quantas vezes quiser: cada remessa gera no máximo um alerta. */
-  checkDelays(): { checked: number; delayed: string[]; alertsCreated: string[] } {
-    const now = this.clock.now();
+  /**
+   * Job de atraso. Pode rodar quantas vezes quiser: cada remessa gera no máximo um alerta.
+   * Antes de criar um alerta novo, reconsulta o agregador: o pacote pode ter sido entregue
+   * e o webhook não ter chegado. Se a consulta falhar, o alerta sai marcado como `stale`.
+   */
+  async checkDelays(): Promise<{ checked: number; delayed: string[]; alertsCreated: string[]; staleAlerts: string[] }> {
     const candidates = this.db.listShipmentsInTransit();
     const delayed: string[] = [];
     const alertsCreated: string[] = [];
-    for (const shipment of candidates) {
+    const staleAlerts: string[] = [];
+    for (const candidate of candidates) {
+      if (!this.isDelayed(candidate)) continue;
+      if (this.db.hasAlert(candidate.id, "atraso")) {
+        delayed.push(candidate.id);
+        continue;
+      }
+
+      let shipment = candidate;
+      let stale = false;
+      try {
+        shipment = (await this.refresh(candidate.id)).shipment;
+      } catch (error) {
+        if (!(error instanceof AggregatorUnavailableError || error instanceof AggregatorResponseError)) throw error;
+        stale = true;
+      }
       if (!this.isDelayed(shipment)) continue;
       delayed.push(shipment.id);
+
+      const now = this.clock.now();
       const elapsedMs = now.getTime() - new Date(shipment.transit_started_at!).getTime();
       const created = this.db.insertAlert(
         shipment.id,
@@ -180,9 +201,11 @@ export class TrackingService {
           limit_hours: this.config.delayLimitMs / 3_600_000,
         },
         now.toISOString(),
+        stale,
       );
       if (created) alertsCreated.push(shipment.id);
+      if (created && stale) staleAlerts.push(shipment.id);
     }
-    return { checked: candidates.length, delayed, alertsCreated };
+    return { checked: candidates.length, delayed, alertsCreated, staleAlerts };
   }
 }

@@ -165,9 +165,14 @@ export function createApp(deps: AppDeps) {
     return c.json({ new_events: newEvents, shipment_id: shipment.id, status: shipment.status });
   });
 
-  app.post("/jobs/check-delays", (c) => {
-    const result = service.checkDelays();
-    return c.json({ checked: result.checked, delayed: result.delayed, alerts_created: result.alertsCreated });
+  app.post("/jobs/check-delays", async (c) => {
+    const result = await service.checkDelays();
+    return c.json({
+      checked: result.checked,
+      delayed: result.delayed,
+      alerts_created: result.alertsCreated,
+      stale_alerts: result.staleAlerts,
+    });
   });
 
   app.get("/alerts", zValidator("query", alertsQuery, onInvalid), (c) => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { HOUR, setup } from "./helpers.ts";
+import { FakeAggregatorClient } from "../../src/aggregator/fake/client.ts";
+import { createFakeAggregatorApp } from "../../src/fake-aggregator/app.ts";
+import { HOUR, setup, WEBHOOK_SECRET } from "./helpers.ts";
 
 const POSTED_AT = "2026-10-01T12:00:00.000Z";
 const LIMIT_HOURS = 72;
@@ -18,7 +20,7 @@ describe("detecção de atraso com relógio controlado", () => {
     const s = await postedShipment(t);
     t.clock.set(new Date(limitReached.getTime() - 1));
     const res = await t.call("POST", "/jobs/check-delays");
-    expect(res.body).toEqual({ checked: 1, delayed: [], alerts_created: [] });
+    expect(res.body).toEqual({ checked: 1, delayed: [], alerts_created: [], stale_alerts: [] });
     expect((await t.call("GET", `/shipments/${s.id}`)).body.delayed).toBe(false);
   });
 
@@ -129,5 +131,87 @@ describe("fechamento do alerta", () => {
   it.each(["sim", "1", "TRUE"])("include_resolved=%s responde 400", async (value) => {
     const t = setup();
     expect((await t.call("GET", `/alerts?include_resolved=${value}`)).status).toBe(400);
+  });
+});
+
+describe("reconsulta do agregador antes de alertar", () => {
+  function withFlakyAggregator() {
+    const fake = createFakeAggregatorApp();
+    const state = { down: false, trackerCalls: 0 };
+    const client = new FakeAggregatorClient({
+      baseUrl: "http://agregador.test",
+      webhookSecret: WEBHOOK_SECRET,
+      fetch: async (url, init) => {
+        if ((init?.method ?? "GET") === "GET") state.trackerCalls++;
+        if (state.down) return new Response("fora do ar", { status: 503 });
+        return fake.request(url, init);
+      },
+    });
+    const t = setup({ aggregator: client, delayLimitHours: LIMIT_HOURS, now: POSTED_AT });
+    const checkpoint = (ref: string, status: string, at: string) =>
+      fake.request(`http://agregador.test/v1/trackers/${ref}/checkpoints`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ carrier_status: status, checkpoint_time: at }),
+      });
+    return { ...t, state, checkpoint };
+  }
+
+  async function posted(t: ReturnType<typeof withFlakyAggregator>) {
+    const s = await t.register();
+    await t.checkpoint(s.aggregator_ref, "Objeto postado", POSTED_AT);
+    await t.call("POST", `/shipments/${s.id}/refresh`);
+    return s;
+  }
+
+  it("entrega que só aparece na reconsulta evita o alerta", async () => {
+    const t = withFlakyAggregator();
+    const s = await posted(t);
+    // O webhook da entrega se perdeu: o agregador sabe, a API ainda não.
+    await t.checkpoint(s.aggregator_ref, "Objeto entregue ao destinatário", "2026-10-04T11:00:00Z");
+    t.clock.set(new Date(limitReached.getTime() + 1));
+    const res = await t.call("POST", "/jobs/check-delays");
+    expect(res.body).toMatchObject({ delayed: [], alerts_created: [] });
+    expect((await t.call("GET", `/shipments/${s.id}`)).body.status).toBe("entregue");
+  });
+
+  it("reconsulta que confirma o atraso cria alerta com stale false", async () => {
+    const t = withFlakyAggregator();
+    const s = await posted(t);
+    t.clock.set(new Date(limitReached.getTime() + 1));
+    const res = await t.call("POST", "/jobs/check-delays");
+    expect(res.body).toMatchObject({ alerts_created: [s.id], stale_alerts: [] });
+    expect((await t.call("GET", "/alerts")).body.alerts[0]).toMatchObject({ stale: false });
+  });
+
+  it("agregador fora do ar na reconsulta cria o alerta marcado stale", async () => {
+    const t = withFlakyAggregator();
+    const s = await posted(t);
+    t.state.down = true;
+    t.clock.set(new Date(limitReached.getTime() + 1));
+    const res = await t.call("POST", "/jobs/check-delays");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ alerts_created: [s.id], stale_alerts: [s.id] });
+    expect((await t.call("GET", "/alerts")).body.alerts[0]).toMatchObject({ shipment_id: s.id, stale: true });
+  });
+
+  it("remessa que já tem alerta não é reconsultada a cada rodada", async () => {
+    const t = withFlakyAggregator();
+    await posted(t);
+    t.clock.set(new Date(limitReached.getTime() + 1));
+    await t.call("POST", "/jobs/check-delays");
+    const calls = t.state.trackerCalls;
+    await t.call("POST", "/jobs/check-delays");
+    await t.call("POST", "/jobs/check-delays");
+    expect(t.state.trackerCalls).toBe(calls);
+  });
+
+  it("antes do limite o job não chama o agregador", async () => {
+    const t = withFlakyAggregator();
+    await posted(t);
+    const calls = t.state.trackerCalls;
+    t.clock.set(limitReached);
+    await t.call("POST", "/jobs/check-delays");
+    expect(t.state.trackerCalls).toBe(calls);
   });
 });

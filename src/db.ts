@@ -249,14 +249,18 @@ export class Db {
   }
 
   /** Devolve true só para quem criou o alerta. Rodar o job de novo não duplica. */
-  insertAlert(shipmentId: string, kind: string, details: unknown, createdAt: string): boolean {
+  insertAlert(shipmentId: string, kind: string, details: unknown, createdAt: string, stale = false): boolean {
     const result = this.raw
       .prepare(
-        `INSERT INTO alerts (shipment_id, kind, details, created_at) VALUES (?, ?, ?, ?)
+        `INSERT INTO alerts (shipment_id, kind, details, created_at, stale) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (shipment_id, kind) DO NOTHING`,
       )
-      .run(shipmentId, kind, JSON.stringify(details), createdAt);
+      .run(shipmentId, kind, JSON.stringify(details), createdAt, stale ? 1 : 0);
     return result.changes > 0;
+  }
+
+  hasAlert(shipmentId: string, kind: string): boolean {
+    return this.raw.prepare("SELECT 1 FROM alerts WHERE shipment_id = ? AND kind = ?").get(shipmentId, kind) !== undefined;
   }
 
   listAlerts(shipmentId: string): AlertRow[] {

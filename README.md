@@ -208,7 +208,7 @@ Polling e webhook também conferem se a referência, a transportadora e o códig
 
 O "agora" vem do `Clock` injetado, então os testes controlam a data. No limite exato ainda não é atraso, e um milissegundo depois já é. Entrega normal não vira atraso porque `entregue` sai da conta, por mais tempo que passe depois. Uma `excecao` em aberto continua contando, já que o pacote ainda não chegou.
 
-`POST /jobs/check-delays` percorre as remessas em trânsito e grava em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
+`POST /jobs/check-delays` percorre as remessas em trânsito. Antes de criar um alerta novo, ele reconsulta o agregador para aquela remessa, porque o webhook da entrega pode ter se perdido. Se a reconsulta mostrar a entrega, não há alerta. Se ela falhar, o alerta é criado com `stale: true` (a informação pode estar desatualizada). Remessa que já tem alerta não é reconsultada. Os alertas ficam em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
 
 ### Autenticação do webhook
 
