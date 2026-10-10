@@ -232,13 +232,13 @@ Recalcular o status do histórico inteiro custa uma leitura de poucas linhas por
 
 ## Teste de carga
 
-`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real na minha máquina:
+`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real, nesta máquina (2026-10-10):
 
 ```
-   ✓ checks.........................: 100.00% 87364 out of 87364
-   ✓ http_req_duration..............: avg=14.29ms min=182.25µs med=8.94ms  max=214.35ms p(90)=33.47ms p(95)=41.75ms
-   ✓ http_req_failed................: 0.00%   0 out of 87405
-     http_reqs......................: 87405   2909.040844/s
+   ✓ checks.........................: 100.00% 129945 out of 129945
+   ✓ http_req_duration..............: avg=9.63ms  min=92.46µs  med=6.32ms max=64.23ms p(90)=23.63ms p(95)=27.01ms
+   ✓ http_req_failed................: 0.00%   0 out of 129986
+     http_reqs......................: 129986  4327.309506/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 
