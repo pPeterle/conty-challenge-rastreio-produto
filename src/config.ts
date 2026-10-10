@@ -6,6 +6,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (!Number.isFinite(limitHours) || limitHours <= 0) {
     throw new Error("DELAY_LIMIT_HOURS precisa ser um número positivo");
   }
+  // DELAY_LIMIT_HOURS_CORREIOS=72 sobrescreve o limite global só para os Correios.
+  const delayLimitByCarrierMs = new Map<string, number>();
+  for (const [key, value] of Object.entries(env)) {
+    const match = /^DELAY_LIMIT_HOURS_([A-Z0-9_]+)$/.exec(key);
+    if (!match) continue;
+    const hours = Number(value);
+    if (!Number.isFinite(hours) || hours <= 0) throw new Error(`${key} precisa ser um número positivo`);
+    delayLimitByCarrierMs.set(match[1].toLowerCase(), hours * HOUR);
+  }
   const toleranceMinutes = Number(env.FUTURE_TOLERANCE_MINUTES ?? 10);
   if (!Number.isFinite(toleranceMinutes) || toleranceMinutes < 0) {
     throw new Error("FUTURE_TOLERANCE_MINUTES precisa ser um número maior ou igual a zero");
@@ -22,6 +31,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     aggregatorUrl: env.AGGREGATOR_URL ?? "http://localhost:3115",
     startFakeAggregator: (env.START_FAKE_AGGREGATOR ?? "true") === "true",
     fakeAggregatorPort: Number(env.FAKE_AGGREGATOR_PORT ?? 3115),
-    tracking: { delayLimitMs: limitHours * HOUR, futureToleranceMs: toleranceMinutes * 60_000 },
+    tracking: {
+      delayLimitMs: limitHours * HOUR,
+      delayLimitByCarrierMs,
+      futureToleranceMs: toleranceMinutes * 60_000,
+    },
   };
 }

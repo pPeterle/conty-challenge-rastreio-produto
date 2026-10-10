@@ -10,7 +10,14 @@ export const HOUR = 3_600_000;
 const AGG = "http://agregador.test";
 export const WEBHOOK_SECRET = "segredo-de-teste";
 
-export function setup(options: { delayLimitHours?: number; now?: string; aggregator?: TrackingAggregator } = {}) {
+export function setup(
+  options: {
+    delayLimitHours?: number;
+    delayLimitHoursByCarrier?: Record<string, number>;
+    now?: string;
+    aggregator?: TrackingAggregator;
+  } = {},
+) {
   const fake = createFakeAggregatorApp();
   const clock = new FixedClock(options.now ?? "2026-10-10T12:00:00.000Z");
   const db = new Db(":memory:");
@@ -22,7 +29,12 @@ export function setup(options: { delayLimitHours?: number; now?: string; aggrega
     db,
     clock,
     aggregator,
-    config: { delayLimitMs: (options.delayLimitHours ?? 72) * HOUR },
+    config: {
+      delayLimitMs: (options.delayLimitHours ?? 72) * HOUR,
+      delayLimitByCarrierMs: new Map(
+        Object.entries(options.delayLimitHoursByCarrier ?? {}).map(([carrier, hours]) => [carrier, hours * HOUR]),
+      ),
+    },
   });
 
   async function call(method: string, path: string, body?: unknown) {

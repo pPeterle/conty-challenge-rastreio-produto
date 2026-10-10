@@ -12,6 +12,8 @@ import { deriveState, isTooFarInFuture, type NormalizedEvent, type StoredEvent }
 export interface TrackingConfig {
   /** Tempo máximo em trânsito antes de virar alerta de atraso. */
   delayLimitMs: number;
+  /** Limite por transportadora; quem não está aqui usa o global. */
+  delayLimitByCarrierMs?: ReadonlyMap<string, number>;
   /** Quanto um evento pode estar à frente do relógio antes de ser ignorado. Padrão: 10 minutos. */
   futureToleranceMs?: number;
 }
@@ -149,6 +151,10 @@ export class TrackingService {
     });
   }
 
+  delayLimitFor(carrier: string): number {
+    return this.config.delayLimitByCarrierMs?.get(carrier) ?? this.config.delayLimitMs;
+  }
+
   isDelayed(shipment: ShipmentRow): boolean {
     return isDelayed(
       {
@@ -156,7 +162,7 @@ export class TrackingService {
         transitStartedAt: shipment.transit_started_at ? new Date(shipment.transit_started_at) : null,
       },
       this.clock.now(),
-      this.config.delayLimitMs,
+      this.delayLimitFor(shipment.carrier),
     );
   }
 
@@ -198,7 +204,7 @@ export class TrackingService {
           needs_review: shipment.needs_review === 1,
           transit_started_at: shipment.transit_started_at,
           elapsed_hours: Math.round((elapsedMs / 3_600_000) * 10) / 10,
-          limit_hours: this.config.delayLimitMs / 3_600_000,
+          limit_hours: this.delayLimitFor(shipment.carrier) / 3_600_000,
         },
         now.toISOString(),
         stale,

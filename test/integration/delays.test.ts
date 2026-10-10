@@ -215,3 +215,26 @@ describe("reconsulta do agregador antes de alertar", () => {
     expect(t.state.trackerCalls).toBe(calls);
   });
 });
+
+describe("limite de atraso por transportadora", () => {
+  it("cada transportadora usa o próprio limite e as outras ficam com o global", async () => {
+    const t = setup({ delayLimitHours: 72, delayLimitHoursByCarrier: { loggi: 24 }, now: POSTED_AT });
+    const correios = await t.register("QB123456789BR", "correios");
+    const loggi = await t.register("LG123456", "loggi");
+    await t.carrierEvent(correios.aggregator_ref, "Objeto postado", POSTED_AT);
+    await t.carrierEvent(loggi.aggregator_ref, "picked_up", POSTED_AT);
+    await t.call("POST", `/shipments/${correios.id}/refresh`);
+    await t.call("POST", `/shipments/${loggi.id}/refresh`);
+
+    t.clock.set(new Date(Date.parse(POSTED_AT) + 24 * HOUR));
+    expect((await t.call("POST", "/jobs/check-delays")).body.alerts_created).toEqual([]);
+
+    t.clock.advance(1);
+    const res = await t.call("POST", "/jobs/check-delays");
+    expect(res.body.alerts_created).toEqual([loggi.id]);
+    expect((await t.call("GET", "/alerts")).body.alerts[0].details.limit_hours).toBe(24);
+
+    t.clock.set(new Date(limitReached.getTime() + 1));
+    expect((await t.call("POST", "/jobs/check-delays")).body.alerts_created).toEqual([correios.id]);
+  });
+});

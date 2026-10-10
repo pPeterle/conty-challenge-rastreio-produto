@@ -23,6 +23,7 @@ npm run load         # sobe tudo com banco temporário, roda k6 no Docker e veri
 | `PORT` | `3105` | porta da API |
 | `DB_PATH` | `rastreio.db` | arquivo sqlite |
 | `DELAY_LIMIT_HOURS` | `168` | limite de tempo em trânsito antes do alerta (7 dias, valor que escolhi sem base em dado real) |
+| `DELAY_LIMIT_HOURS_<TRANSPORTADORA>` | o global | limite só para aquela transportadora, ex. `DELAY_LIMIT_HOURS_CORREIOS=120` |
 | `FUTURE_TOLERANCE_MINUTES` | `10` | quanto um evento pode estar à frente do relógio antes de ser ignorado no cálculo |
 | `AGGREGATOR_URL` | `http://localhost:3115` | onde está o agregador |
 | `AGGREGATOR_WEBHOOK_SECRET` | `segredo-local` fora de produção | segredo do HMAC do webhook; obrigatório com `NODE_ENV=production` |
