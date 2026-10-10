@@ -6,12 +6,16 @@ import {
 import type { Clock } from "./clock.ts";
 import type { Db, EventRow, ShipmentRow } from "./db.ts";
 import { isDelayed } from "./domain/delay.ts";
-import { deriveState, type NormalizedEvent } from "./domain/status.ts";
+import { deriveState, isTooFarInFuture, type NormalizedEvent, type StoredEvent } from "./domain/status.ts";
 
 export interface TrackingConfig {
   /** Tempo máximo em trânsito antes de virar alerta de atraso. */
   delayLimitMs: number;
+  /** Quanto um evento pode estar à frente do relógio antes de ser ignorado. Padrão: 10 minutos. */
+  futureToleranceMs?: number;
 }
+
+export const DEFAULT_FUTURE_TOLERANCE_MS = 10 * 60_000;
 
 export class NotFoundError extends Error {}
 
@@ -20,8 +24,9 @@ export interface IngestResult {
   newEvents: number;
 }
 
-function rowToEvent(row: EventRow): NormalizedEvent {
+function rowToEvent(row: EventRow): StoredEvent {
   return {
+    ignoredReason: row.ignored_reason,
     key: row.event_key,
     status: row.status,
     rawCode: row.raw_code,
@@ -102,10 +107,17 @@ export class TrackingService {
    * torna o resultado independente da ordem de chegada.
    */
   private apply(shipmentId: string, events: readonly NormalizedEvent[]): IngestResult {
-    const now = this.clock.now().toISOString();
+    const receivedAt = this.clock.now();
+    const now = receivedAt.toISOString();
+    const tolerance = this.config.futureToleranceMs ?? DEFAULT_FUTURE_TOLERANCE_MS;
+    // A decisão é tomada na chegada e fica gravada: o mesmo evento reenviado depois cai no dedupe.
+    const stored: StoredEvent[] = events.map((e) => ({
+      ...e,
+      ignoredReason: isTooFarInFuture(e.occurredAt, receivedAt, tolerance) ? "data_no_futuro" : null,
+    }));
     return this.db.transaction(() => {
       const before = this.db.findShipment(shipmentId)!;
-      const newEvents = this.db.insertEvents(shipmentId, events, now);
+      const newEvents = this.db.insertEvents(shipmentId, stored, now);
       if (newEvents === 0) return { shipment: before, newEvents };
 
       const state = deriveState(this.db.listEvents(shipmentId).map(rowToEvent));

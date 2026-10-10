@@ -23,6 +23,7 @@ Variáveis de ambiente:
 | `PORT` | `3105` | porta da API |
 | `DB_PATH` | `rastreio.db` | arquivo sqlite |
 | `DELAY_LIMIT_HOURS` | `168` | limite de tempo em trânsito antes do alerta (7 dias, valor que escolhi sem base em dado real) |
+| `FUTURE_TOLERANCE_MINUTES` | `10` | quanto um evento pode estar à frente do relógio antes de ser ignorado no cálculo |
 | `AGGREGATOR_URL` | `http://localhost:3115` | onde está o agregador |
 | `AGGREGATOR_WEBHOOK_SECRET` | `segredo-local` fora de produção | segredo do HMAC do webhook; com `NODE_ENV=production` é obrigatório |
 | `START_FAKE_AGGREGATOR` | `true` | sobe o agregador fictício junto com a API |
@@ -176,6 +177,10 @@ Pular etapas é permitido porque transportadoras às vezes não reportam todas.
 Qualquer código fora da tabela vira `desconhecido`. Ele fica no histórico com o texto original e marca `needs_review: true`, mas não muda o status nem inicia o relógio de trânsito.
 
 Pensei em tratar desconhecido como `excecao`. Desisti porque transportadora muda texto o tempo todo, e cada variação nova iria parecer problema no pacote e poderia esconder um avanço real. Também não tento adivinhar: "Entregue ao vizinho, talvez" e o código Jadlog `ENTREGUE PARCIAL` contêm a palavra "entregue" e mesmo assim viram `desconhecido`. Errar para `entregue` seria o pior caso, porque o prazo de conteúdo do criador começaria a contar sem o produto na mão dele. O custo dessa escolha é que alguém precisa olhar as remessas com `needs_review` e acrescentar o código na tabela.
+
+### Evento com data no futuro
+
+Um evento datado mais de 10 minutos (configurável) depois do instante em que chegou entra no histórico com `ignored_reason: "data_no_futuro"`, fica fora do cálculo do status e do relógio de trânsito e liga `needs_review`. Preferi guardar a recusar porque o evento pode ser verdadeiro com fuso trocado, e alguém precisa ver isso. A decisão é tomada na chegada e fica gravada: o mesmo evento reenviado depois cai no dedupe e continua ignorado. Testes em `test/integration/future-events.test.ts`.
 
 ### Deduplicação
 

@@ -93,6 +93,7 @@ export function createApp(deps: AppDeps) {
       description: e.description,
       location: e.location,
       occurred_at: e.occurred_at,
+      ignored_reason: e.ignored_reason,
     })),
     status_changes: db.listStatusChanges(row.id).map((s) => ({ from: s.from_status, to: s.to_status, at: s.changed_at })),
     alerts: db.listAlerts(row.id).map(alertView),

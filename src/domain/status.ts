@@ -29,6 +29,23 @@ export interface NormalizedEvent {
   occurredAt: Date;
 }
 
+/** Motivo para um evento ficar no histórico mas fora do cálculo do status. */
+export type IgnoredReason = "data_no_futuro";
+
+/** Evento como fica guardado: o normalizado mais a decisão tomada quando ele chegou. */
+export interface StoredEvent extends NormalizedEvent {
+  ignoredReason: IgnoredReason | null;
+}
+
+/**
+ * Evento datado além da tolerância depois do instante em que chegou. Relógio
+ * errado na transportadora, fuso trocado ou dado forjado: nenhum desses deve
+ * marcar uma etapa que ainda não aconteceu.
+ */
+export function isTooFarInFuture(occurredAt: Date, receivedAt: Date, toleranceMs: number): boolean {
+  return occurredAt.getTime() - receivedAt.getTime() > toleranceMs;
+}
+
 type ProgressStatus = Exclude<ShipmentStatus, "excecao">;
 
 /** Ordem de avanço. `excecao` fica fora: é um desvio, não uma etapa. */
@@ -58,14 +75,14 @@ export interface DerivedState {
  * Deriva o status atual a partir do conjunto de eventos, sem depender da ordem
  * em que chegaram. Regras:
  *
- * 1. `desconhecido` é ignorado (só marca `needsReview`).
+ * 1. `desconhecido` e evento com `ignoredReason` ficam de fora (só marcam `needsReview`).
  * 2. `entregue` é terminal: se existe, o status é `entregue`.
  * 3. O avanço é o maior rank entre os eventos de progresso. Um evento antigo
  *    que chega depois nunca diminui esse máximo, então o status não regride.
  * 4. `excecao` vale enquanto nenhum evento de progresso tiver `occurredAt`
  *    estritamente posterior à exceção mais recente. Empate fica com a exceção.
  */
-export function deriveState(events: readonly NormalizedEvent[]): DerivedState {
+export function deriveState(events: readonly (NormalizedEvent & { ignoredReason?: IgnoredReason | null })[]): DerivedState {
   let best: { rank: number; event: NormalizedEvent } | null = null;
   let latestProgress: NormalizedEvent | null = null;
   let latestException: NormalizedEvent | null = null;
@@ -74,7 +91,7 @@ export function deriveState(events: readonly NormalizedEvent[]): DerivedState {
   let needsReview = false;
 
   for (const event of events) {
-    if (event.status === "desconhecido") {
+    if (event.status === "desconhecido" || event.ignoredReason) {
       needsReview = true;
       continue;
     }

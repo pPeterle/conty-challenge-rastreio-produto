@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import type { EventStatus, NormalizedEvent, ShipmentStatus } from "./domain/status.ts";
+import type { EventStatus, IgnoredReason, ShipmentStatus, StoredEvent } from "./domain/status.ts";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS shipments (
@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tracking_events (
   location    TEXT,
   occurred_at TEXT NOT NULL,
   received_at TEXT NOT NULL,
+  -- Preenchido quando o evento fica no histórico mas fora do cálculo (ex.: data_no_futuro).
+  ignored_reason TEXT,
   UNIQUE (shipment_id, event_key)
 );
 CREATE INDEX IF NOT EXISTS idx_events_shipment ON tracking_events (shipment_id, occurred_at);
@@ -80,6 +82,7 @@ export interface EventRow {
   location: string | null;
   occurred_at: string;
   received_at: string;
+  ignored_reason: IgnoredReason | null;
 }
 
 export interface StatusChangeRow {
@@ -173,11 +176,11 @@ export class Db {
   }
 
   /** Insere só os eventos ainda não vistos. Devolve quantos eram novos. */
-  insertEvents(shipmentId: string, events: readonly NormalizedEvent[], receivedAt: string): number {
+  insertEvents(shipmentId: string, events: readonly StoredEvent[], receivedAt: string): number {
     const stmt = this.raw.prepare(
       `INSERT INTO tracking_events
-         (shipment_id, event_key, status, raw_code, description, location, occurred_at, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (shipment_id, event_key, status, raw_code, description, location, occurred_at, received_at, ignored_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (shipment_id, event_key) DO NOTHING`,
     );
     let inserted = 0;
@@ -191,6 +194,7 @@ export class Db {
         e.location,
         e.occurredAt.toISOString(),
         receivedAt,
+        e.ignoredReason,
       );
       inserted += Number(result.changes);
     }

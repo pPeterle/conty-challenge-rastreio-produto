@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveState, type EventStatus, type NormalizedEvent } from "../../src/domain/status.ts";
+import { deriveState, isTooFarInFuture, type EventStatus, type NormalizedEvent } from "../../src/domain/status.ts";
 
 let seq = 0;
 function ev(status: EventStatus, occurredAt: string, rawCode: string = status): NormalizedEvent {
@@ -94,5 +94,21 @@ describe("deriveState", () => {
   it("entregue é terminal: exceção posterior fica no histórico mas não muda o status", () => {
     const events = [ev("entregue", "2026-10-04T09:00:00Z"), ev("excecao", "2026-10-05T09:00:00Z")];
     expect(deriveState(events)).toMatchObject({ status: "entregue", deliveredAt: new Date("2026-10-04T09:00:00Z") });
+  });
+});
+
+describe("eventos ignorados e datas no futuro", () => {
+  it("evento com ignoredReason fica fora do status e do relógio de trânsito, mas pede revisão", () => {
+    const events = [
+      { ...ev("postado", "2026-10-01T10:00:00Z"), ignoredReason: null },
+      { ...ev("entregue", "2026-12-01T10:00:00Z"), ignoredReason: "data_no_futuro" as const },
+    ];
+    expect(deriveState(events)).toMatchObject({ status: "postado", deliveredAt: null, needsReview: true });
+  });
+
+  it("isTooFarInFuture é estrito: no limite exato não é futuro", () => {
+    const received = new Date("2026-10-10T12:00:00Z");
+    expect(isTooFarInFuture(new Date("2026-10-10T12:10:00Z"), received, 10 * 60_000)).toBe(false);
+    expect(isTooFarInFuture(new Date("2026-10-10T12:10:00.001Z"), received, 10 * 60_000)).toBe(true);
   });
 });

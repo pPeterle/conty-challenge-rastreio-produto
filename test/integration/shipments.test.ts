@@ -153,7 +153,7 @@ describe("eventos fora de ordem", () => {
         tracker: { id: s.aggregator_ref, tracking_number: "LG123456", carrier: "loggi", checkpoints },
       });
 
-    await webhook([{ checkpoint_id: "c3", carrier_status: "delivered", checkpoint_time: "2026-10-10T14:00:00Z" }]);
+    await webhook([{ checkpoint_id: "c3", carrier_status: "delivered", checkpoint_time: "2026-10-10T11:00:00Z" }]);
     const late = await webhook([
       { checkpoint_id: "c1", carrier_status: "picked_up", checkpoint_time: "2026-10-08T10:00:00Z" },
       { checkpoint_id: "c2", carrier_status: "out_for_delivery", checkpoint_time: "2026-10-10T09:00:00Z" },
@@ -261,6 +261,7 @@ describe("devolução ao remetente", () => {
     await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-01T12:00:00Z");
     await t.carrierEvent(s.aggregator_ref, "Objeto devolvido ao remetente", "2026-10-03T12:00:00Z");
     await t.carrierEvent(s.aggregator_ref, "Objeto entregue ao remetente", "2026-10-04T10:00:00Z");
+    t.clock.set("2026-10-04T11:00:00Z");
     const res = await t.call("POST", `/shipments/${s.id}/refresh`);
     expect(res.body.shipment).toMatchObject({ status: "excecao", delivered_at: null });
 
