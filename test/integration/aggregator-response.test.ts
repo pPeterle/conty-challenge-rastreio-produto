@@ -164,7 +164,7 @@ describe("código de rastreio devolvido pelo agregador é conferido", () => {
 });
 
 describe("fuso horário impossível no checkpoint_time", () => {
-  const OFFSETS = ["+24:00", "+99:00", "+23:60", "-25:00"];
+  const OFFSETS = ["+24:00", "+99:00", "+23:60", "-25:00", "-15:00", "+14:01", "+23:59"];
   const body = (ref: string, offset: string) => ({
     tracker: {
       id: ref,
@@ -180,7 +180,7 @@ describe("fuso horário impossível no checkpoint_time", () => {
     const res = await t.webhook(body(s.aggregator_ref, offset));
     expect(res.status).toBe(400);
     expect(res.body.error.details).toEqual([
-      { path: "tracker.checkpoints.0.checkpoint_time", message: "fuso horário inválido (horas de 00 a 23, minutos de 00 a 59)" },
+      { path: "tracker.checkpoints.0.checkpoint_time", message: "fuso horário inválido (aceito de -14:00 a +14:00)" },
     ]);
     expect((await t.call("GET", `/shipments/${s.id}`)).body.events).toEqual([]);
   });
@@ -195,7 +195,7 @@ describe("fuso horário impossível no checkpoint_time", () => {
     expect((await t.call("GET", `/shipments/${s.id}`)).body.events).toEqual([]);
   });
 
-  it.each(["+23:59", "-12:00", "+05:45"])("fuso %s válido é aceito", async (offset) => {
+  it.each(["+14:00", "-14:00", "-12:00", "+05:45"])("fuso %s válido é aceito", async (offset) => {
     const t = setup();
     const s = await t.register();
     expect((await t.webhook(body(s.aggregator_ref, offset))).status).toBe(200);
