@@ -1,0 +1,6 @@
+node_modules/
+*.db
+*.db-*
+.env
+.load-tmp/
+coverage/
