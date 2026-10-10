@@ -41,6 +41,13 @@ export const pageQuery = z.object({
     .transform((v) => v ?? 0),
 });
 
+export const alertsQuery = pageQuery.extend({
+  include_resolved: z
+    .enum(["true", "false"], { message: "precisa ser true ou false" })
+    .optional()
+    .transform((v) => v === "true"),
+});
+
 export const shipmentIdParam = z.object({
   id: z.string().trim().min(1).max(100),
 });

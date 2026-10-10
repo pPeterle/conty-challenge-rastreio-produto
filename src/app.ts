@@ -12,7 +12,7 @@ import {
 } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { AlertRow, Db, ShipmentRow } from "./db.ts";
-import { createShipmentBody, pageQuery, shipmentIdParam } from "./schemas.ts";
+import { alertsQuery, createShipmentBody, pageQuery, shipmentIdParam } from "./schemas.ts";
 import { NotFoundError, TrackingService, type TrackingConfig } from "./service.ts";
 import { issuesOf, summarize, type FieldIssue } from "./validation.ts";
 
@@ -48,7 +48,15 @@ const requireJson: MiddlewareHandler = async (c, next) => {
 };
 
 function alertView(row: AlertRow) {
-  return { id: row.id, shipment_id: row.shipment_id, kind: row.kind, details: JSON.parse(row.details), created_at: row.created_at };
+  return {
+    id: row.id,
+    shipment_id: row.shipment_id,
+    kind: row.kind,
+    details: JSON.parse(row.details),
+    stale: row.stale === 1,
+    created_at: row.created_at,
+    resolved_at: row.resolved_at,
+  };
 }
 
 export function createApp(deps: AppDeps) {
@@ -162,9 +170,10 @@ export function createApp(deps: AppDeps) {
     return c.json({ checked: result.checked, delayed: result.delayed, alerts_created: result.alertsCreated });
   });
 
-  app.get("/alerts", zValidator("query", pageQuery, onInvalid), (c) => {
-    const page = c.req.valid("query");
-    return c.json({ ...page, alerts: db.listAlertsPage(page.limit, page.offset).map(alertView) });
+  app.get("/alerts", zValidator("query", alertsQuery, onInvalid), (c) => {
+    const { include_resolved: includeResolved, ...page } = c.req.valid("query");
+    const alerts = db.listAlertsPage(page.limit, page.offset, includeResolved).map(alertView);
+    return c.json({ ...page, include_resolved: includeResolved, alerts });
   });
 
   return app;

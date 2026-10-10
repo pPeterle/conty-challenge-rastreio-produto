@@ -54,8 +54,13 @@ CREATE TABLE IF NOT EXISTS alerts (
   kind        TEXT NOT NULL,
   details     TEXT NOT NULL,
   created_at  TEXT NOT NULL,
+  -- 1 quando o job não conseguiu reconsultar o agregador antes de criar o alerta.
+  stale       INTEGER NOT NULL DEFAULT 0,
+  -- Preenchido quando a remessa é entregue depois do alerta.
+  resolved_at TEXT,
   UNIQUE (shipment_id, kind)
 );
+CREATE INDEX IF NOT EXISTS idx_alerts_open ON alerts (id) WHERE resolved_at IS NULL;
 `;
 
 export interface ShipmentRow {
@@ -99,6 +104,8 @@ export interface AlertRow {
   kind: string;
   details: string;
   created_at: string;
+  stale: number;
+  resolved_at: string | null;
 }
 
 export interface ShipmentStateUpdate {
@@ -258,7 +265,16 @@ export class Db {
       .all(shipmentId) as unknown as AlertRow[];
   }
 
-  listAlertsPage(limit: number, offset: number): AlertRow[] {
-    return this.raw.prepare("SELECT * FROM alerts ORDER BY id LIMIT ? OFFSET ?").all(limit, offset) as unknown as AlertRow[];
+  listAlertsPage(limit: number, offset: number, includeResolved: boolean): AlertRow[] {
+    const where = includeResolved ? "" : "WHERE resolved_at IS NULL";
+    return this.raw
+      .prepare(`SELECT * FROM alerts ${where} ORDER BY id LIMIT ? OFFSET ?`)
+      .all(limit, offset) as unknown as AlertRow[];
+  }
+
+  resolveAlerts(shipmentId: string, resolvedAt: string): void {
+    this.raw
+      .prepare("UPDATE alerts SET resolved_at = ? WHERE shipment_id = ? AND resolved_at IS NULL")
+      .run(resolvedAt, shipmentId);
   }
 }

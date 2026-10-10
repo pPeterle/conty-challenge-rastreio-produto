@@ -39,7 +39,7 @@ npm run load         # sobe tudo com banco temporário, roda k6 no Docker e veri
 | `POST /shipments/:id/refresh` | polling: busca o histórico no agregador e aplica o que for novo |
 | `POST /webhooks/aggregator` | recebe o payload bruto do agregador, assinado com HMAC |
 | `POST /jobs/check-delays` | job de atraso; pode rodar quantas vezes quiser |
-| `GET /alerts?limit=&offset=` | alertas registrados, paginados como acima |
+| `GET /alerts?limit=&offset=&include_resolved=` | alertas abertos, paginados como acima; `include_resolved=true` traz também os resolvidos |
 
 Erros seguem `{ "error": { "code", "message", "details"? } }`:
 
@@ -208,7 +208,7 @@ Polling e webhook também conferem se a referência, a transportadora e o códig
 
 O "agora" vem do `Clock` injetado, então os testes controlam a data. No limite exato ainda não é atraso, e um milissegundo depois já é. Entrega normal não vira atraso porque `entregue` sai da conta, por mais tempo que passe depois. Uma `excecao` em aberto continua contando, já que o pacote ainda não chegou.
 
-`POST /jobs/check-delays` percorre as remessas em trânsito e grava em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
+`POST /jobs/check-delays` percorre as remessas em trânsito e grava em `alerts`, que tem `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta. Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado. A tabela serve como outbox para quem for mandar e-mail ou mensagem. Esse envio não está implementado.
 
 ### Autenticação do webhook
 

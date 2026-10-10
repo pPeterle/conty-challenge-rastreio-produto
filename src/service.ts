@@ -134,6 +134,8 @@ export class TrackingService {
       if (state.status !== null && state.status !== before.status) {
         this.db.insertStatusChange(shipmentId, before.status, state.status, now);
       }
+      // Pacote chegou: o alerta de atraso fica no registro, mas deixa de estar aberto.
+      if (state.status === "entregue" && before.status !== "entregue") this.db.resolveAlerts(shipmentId, now);
       this.db.updateShipmentState(shipmentId, {
         status: state.status,
         statusSince: iso(state.since),

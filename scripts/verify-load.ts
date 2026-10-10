@@ -40,7 +40,7 @@ for (const [id, exp] of Object.entries(expected)) {
   }
 }
 
-const alerts = ((await (await fetch(`${API}/alerts`)).json()) as any).alerts as Array<{ shipment_id: string; kind: string }>;
+const alerts = ((await (await fetch(`${API}/alerts?include_resolved=true&limit=200`)).json()) as any).alerts as Array<{ shipment_id: string; kind: string }>;
 const alertKeys = new Set(alerts.map((a) => `${a.shipment_id}|${a.kind}`));
 if (alertKeys.size !== alerts.length) failures.push("existe alerta duplicado para a mesma remessa");
 

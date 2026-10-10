@@ -95,3 +95,39 @@ describe("detecção de atraso com relógio controlado", () => {
     expect((await t.call("POST", "/jobs/check-delays")).body.alerts_created).toEqual([s.id]);
   });
 });
+
+describe("fechamento do alerta", () => {
+  it("entrega depois do alerta grava resolved_at e o alerta sai da lista padrão", async () => {
+    const t = setup({ delayLimitHours: LIMIT_HOURS, now: POSTED_AT });
+    const s = await postedShipment(t);
+    t.clock.set(new Date(limitReached.getTime() + HOUR));
+    await t.call("POST", "/jobs/check-delays");
+    expect((await t.call("GET", "/alerts")).body.alerts).toHaveLength(1);
+
+    await t.carrierEvent(s.aggregator_ref, "Objeto entregue ao destinatário", "2026-10-04T13:30:00Z");
+    t.clock.set("2026-10-04T14:00:00Z");
+    await t.call("POST", `/shipments/${s.id}/refresh`);
+
+    const open = await t.call("GET", "/alerts");
+    expect(open.body).toMatchObject({ include_resolved: false, alerts: [] });
+    const all = await t.call("GET", "/alerts?include_resolved=true");
+    expect(all.body.alerts).toHaveLength(1);
+    expect(all.body.alerts[0]).toMatchObject({ shipment_id: s.id, resolved_at: "2026-10-04T14:00:00.000Z" });
+    expect((await t.call("GET", `/shipments/${s.id}`)).body.alerts[0].resolved_at).toBe("2026-10-04T14:00:00.000Z");
+  });
+
+  it("evento novo que não é entrega mantém o alerta aberto", async () => {
+    const t = setup({ delayLimitHours: LIMIT_HOURS, now: POSTED_AT });
+    const s = await postedShipment(t);
+    t.clock.set(new Date(limitReached.getTime() + HOUR));
+    await t.call("POST", "/jobs/check-delays");
+    await t.carrierEvent(s.aggregator_ref, "Objeto saiu para entrega ao destinatário", "2026-10-04T12:30:00Z");
+    await t.call("POST", `/shipments/${s.id}/refresh`);
+    expect((await t.call("GET", "/alerts")).body.alerts[0]).toMatchObject({ resolved_at: null });
+  });
+
+  it.each(["sim", "1", "TRUE"])("include_resolved=%s responde 400", async (value) => {
+    const t = setup();
+    expect((await t.call("GET", `/alerts?include_resolved=${value}`)).status).toBe(400);
+  });
+});
