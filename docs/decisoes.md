@@ -47,6 +47,7 @@ O "agora" vem do `Clock` injetado, então os testes controlam a data. No limite 
 - Antes de criar um alerta novo, reconsulta o agregador para aquela remessa, porque o webhook da entrega pode ter se perdido. Se a reconsulta mostrar a entrega, não há alerta.
 - Se a reconsulta falhar, o alerta é criado com `stale: true`, porque a informação pode estar desatualizada.
 - Remessa que já tem alerta não é reconsultada.
+- As reconsultas são feitas uma remessa por vez. A rodada do job custa uma chamada ao agregador (até 5 s de timeout) para cada remessa atrasada que ainda não tem alerta; com muitas nessa situação, a rodada demora proporcionalmente. Com volume maior eu limitaria a concorrência dessas chamadas ou levaria a reconsulta para uma fila.
 - Os alertas ficam em `alerts`, com `UNIQUE (shipment_id, kind)`. Rodar de novo, ou em paralelo, não duplica o alerta.
 - Quando a remessa é entregue depois do alerta, ele ganha `resolved_at` e sai da lista padrão de `GET /alerts`, mas continua registrado.
 
@@ -73,4 +74,4 @@ O agregador assina o corpo bruto com HMAC-SHA256 e manda `x-aggregator-signature
 | 502 `agregador_resposta_invalida` | resposta inutilizável no cadastro ou no polling (HTML, formato errado, dados de outra remessa) |
 | 500 | erro inesperado, com mensagem genérica; o detalhe vai só para o log |
 
-Tudo que entra passa por schema zod. Os da API estão em `src/schemas.ts`, ligados com `@hono/zod-validator` e um hook único de erro. Os do formato do agregador e do header de assinatura estão em `src/aggregator/fake/schemas.ts`, dentro do adaptador. Campos extras são ignorados. Webhook com mais de 500 eventos, texto longo demais ou data sem fuso ou inexistente (30 de fevereiro) é recusado sem gravar nada. Os casos estão em `test/integration/payloads-invalidos.test.ts`.
+Tudo que entra passa por schema zod. Os da API estão em `src/schemas.ts`, ligados com `@hono/zod-validator` e um hook único de erro. Os do formato do agregador e do header de assinatura estão em `src/aggregator/fake/schemas.ts`, dentro do adaptador. Campos extras são ignorados. Webhook com mais de 500 eventos, texto longo demais, data sem fuso, fuso impossível (`+24:00`, `+23:60`) ou data inexistente (30 de fevereiro) é recusado sem gravar nada; a mesma coisa na resposta do polling vira 502. O cadastro não recebe datas. Os casos estão em `test/integration/payloads-invalidos.test.ts`.

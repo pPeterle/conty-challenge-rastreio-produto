@@ -162,3 +162,42 @@ describe("código de rastreio devolvido pelo agregador é conferido", () => {
   });
 
 });
+
+describe("fuso horário impossível no checkpoint_time", () => {
+  const OFFSETS = ["+24:00", "+99:00", "+23:60", "-25:00"];
+  const body = (ref: string, offset: string) => ({
+    tracker: {
+      id: ref,
+      tracking_number: "QB123456789BR",
+      carrier: "correios",
+      checkpoints: [{ checkpoint_id: "f", carrier_status: "Objeto postado", checkpoint_time: `2026-10-01T10:00:00${offset}` }],
+    },
+  });
+
+  it.each(OFFSETS)("webhook com fuso %s responde 400 sem gravar", async (offset) => {
+    const t = setup();
+    const s = await t.register();
+    const res = await t.webhook(body(s.aggregator_ref, offset));
+    expect(res.status).toBe(400);
+    expect(res.body.error.details).toEqual([
+      { path: "tracker.checkpoints.0.checkpoint_time", message: "fuso horário inválido (horas de 00 a 23, minutos de 00 a 59)" },
+    ]);
+    expect((await t.call("GET", `/shipments/${s.id}`)).body.events).toEqual([]);
+  });
+
+  it.each(OFFSETS)("polling com fuso %s responde 502 sem gravar", async (offset) => {
+    const t = brokenAggregator();
+    const s = await t.register();
+    t.breakNext(json(body(s.aggregator_ref, offset)));
+    const res = await t.call("POST", `/shipments/${s.id}/refresh`);
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe("agregador_resposta_invalida");
+    expect((await t.call("GET", `/shipments/${s.id}`)).body.events).toEqual([]);
+  });
+
+  it.each(["+23:59", "-12:00", "+05:45"])("fuso %s válido é aceito", async (offset) => {
+    const t = setup();
+    const s = await t.register();
+    expect((await t.webhook(body(s.aggregator_ref, offset))).status).toBe(200);
+  });
+});

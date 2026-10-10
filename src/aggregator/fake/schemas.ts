@@ -5,6 +5,13 @@ import { z } from "../../validation.ts";
 export const MAX_CHECKPOINTS = 500;
 
 /** Ida e volta pelo calendário: 2026-02-30 vira 2026-03-02 no Date, e isso denuncia a data inexistente. */
+/** O zod aceita qualquer ±hh:mm; +24:00 ou +23:60 viram NaN no Date. */
+export function hasValidOffset(value: string): boolean {
+  const m = /([+-])(\d{2}):?(\d{2})$/.exec(value);
+  if (!m) return true; // "Z": o formato já foi validado pelo datetime
+  return Number(m[2]) <= 23 && Number(m[3]) <= 59;
+}
+
 export function isRealCalendarDate(value: string): boolean {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
   if (!m) return false;
@@ -29,9 +36,13 @@ export const rawCheckpointSchema = z.object({
   checkpoint_time: z
     .string()
     .datetime({ offset: true })
-    // Só confere o calendário quando o formato já passou; senão o erro do formato basta.
+    // Só confere fuso e calendário quando o formato já passou; senão o erro do formato basta.
     .refine(
-      (v) => !/^\d{4}-\d{2}-\d{2}T/.test(v) || (isRealCalendarDate(v) && !Number.isNaN(Date.parse(v))),
+      (v) => !/^\d{4}-\d{2}-\d{2}T/.test(v) || hasValidOffset(v),
+      "fuso horário inválido (horas de 00 a 23, minutos de 00 a 59)",
+    )
+    .refine(
+      (v) => !/^\d{4}-\d{2}-\d{2}T/.test(v) || !hasValidOffset(v) || (isRealCalendarDate(v) && !Number.isNaN(Date.parse(v))),
       "data inexistente no calendário",
     ),
 });
