@@ -6,6 +6,8 @@ describe("tradução do dialeto de cada transportadora", () => {
     ["correios", "Objeto postado", "postado"],
     ["correios", "Objeto em trânsito - por favor aguarde", "em_transito"],
     ["correios", "objeto em transito", "em_transito"],
+    ["correios", "  OBJETO   ENTREGUE ao destinatário.  ", "entregue"],
+    ["correios", "Objeto saiu para entrega", "saiu_para_entrega"],
     ["correios", "Objeto saiu para entrega ao destinatário", "saiu_para_entrega"],
     ["correios", "Objeto entregue ao destinatário", "entregue"],
     ["correios", "Objeto não entregue - destinatário ausente", "excecao"],
@@ -29,6 +31,13 @@ describe("tradução do dialeto de cada transportadora", () => {
     ["correios", "Objeto entregue na unidade de origem para devolução"],
     ["correios", "Objeto entregue à transportadora"],
     ["correios", "Objeto entregue parcialmente"],
+    ["correios", "Objeto entregue ao destinatário parcialmente"],
+    ["correios", "Objeto entregue ao destinatario errado"],
+    ["correios", "Objeto entregue ao destinatário? Não"],
+    ["correios", "Objeto saiu para entrega - cancelada"],
+    ["correios", "Objeto postado (dados incompletos)"],
+    ["jadlog", "ENTREGUE?"],
+    ["loggi", "delivered_maybe"],
     ["jadlog", "ENTREGUE PARCIAL"],
     ["loggi", "delivered_to_drone"],
     ["transportadora-nova", "delivered"],
@@ -36,7 +45,14 @@ describe("tradução do dialeto de cada transportadora", () => {
     expect(mapCarrierStatus(carrier, raw)).toBe("desconhecido");
   });
 
-  it.each(["Objeto entregue ao remetente", "Objeto entregue na unidade de origem para devolução", "Objeto entregue à transportadora"])(
+  it.each([
+    "Objeto entregue ao remetente",
+    "Objeto entregue na unidade de origem para devolução",
+    "Objeto entregue à transportadora",
+    "Objeto entregue ao destinatário parcialmente",
+    "Objeto entregue ao destinatario errado",
+    "Objeto entregue ao destinatário? Não",
+  ])(
     "%s nunca vira entregue",
     (raw) => {
       expect(mapCarrierStatus("correios", raw)).not.toBe("entregue");

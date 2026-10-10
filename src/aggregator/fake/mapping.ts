@@ -8,27 +8,31 @@ function normalizeText(value: string): string {
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/\.$/, "");
 }
 
 /**
- * Correios descreve em texto livre e às vezes acrescenta complemento
- * ("Objeto em trânsito - por favor aguarde"), por isso o casamento é por prefixo.
- * "Entregue" só vale com o destinatário no texto: "Objeto entregue ao remetente"
- * ou "Objeto entregue na unidade de origem" não são entrega ao criador.
+ * Correios descreve em texto livre. O casamento é exato depois de normalizar
+ * (sem acento, minúsculo, espaços colapsados, sem ponto final): um prefixo
+ * deixaria "Objeto entregue ao destinatário errado" virar entregue. Texto que
+ * não está aqui vira desconhecido e vai para revisão.
  */
-const CORREIOS_PREFIXES: Array<[string, EventStatus]> = [
-  ["objeto nao entregue", "excecao"],
-  ["objeto devolvido", "excecao"],
-  ["objeto entregue ao remetente", "excecao"],
-  ["objeto extraviado", "excecao"],
-  ["objeto postado", "postado"],
-  ["objeto em transito", "em_transito"],
-  ["objeto encaminhado", "em_transito"],
-  ["objeto saiu para entrega", "saiu_para_entrega"],
-  ["saiu para entrega", "saiu_para_entrega"],
-  ["objeto entregue ao destinatario", "entregue"],
-];
+const CORREIOS_TEXTS: Record<string, EventStatus> = {
+  "objeto postado": "postado",
+  "objeto postado apos o horario limite da unidade": "postado",
+  "objeto em transito": "em_transito",
+  "objeto em transito - por favor aguarde": "em_transito",
+  "objeto encaminhado": "em_transito",
+  "objeto saiu para entrega": "saiu_para_entrega",
+  "objeto saiu para entrega ao destinatario": "saiu_para_entrega",
+  "objeto entregue ao destinatario": "entregue",
+  "objeto nao entregue - destinatario ausente": "excecao",
+  "objeto nao entregue - endereco incorreto": "excecao",
+  "objeto devolvido ao remetente": "excecao",
+  "objeto entregue ao remetente": "excecao",
+  "objeto extraviado": "excecao",
+};
 
 const JADLOG_CODES: Record<string, EventStatus> = {
   EMISSAO: "postado",
@@ -53,14 +57,12 @@ const LOGGI_CODES: Record<string, EventStatus> = {
 /** Qualquer código fora das tabelas vira `desconhecido`, nunca um palpite. */
 export function mapCarrierStatus(carrier: string, carrierStatus: string): EventStatus {
   switch (carrier.toLowerCase()) {
-    case "correios": {
-      const text = normalizeText(carrierStatus);
-      return CORREIOS_PREFIXES.find(([prefix]) => text.startsWith(prefix))?.[1] ?? "desconhecido";
-    }
+    case "correios":
+      return CORREIOS_TEXTS[normalizeText(carrierStatus)] ?? "desconhecido";
     case "jadlog":
-      return JADLOG_CODES[carrierStatus.trim().toUpperCase()] ?? "desconhecido";
+      return JADLOG_CODES[normalizeText(carrierStatus).toUpperCase()] ?? "desconhecido";
     case "loggi":
-      return LOGGI_CODES[carrierStatus.trim().toLowerCase()] ?? "desconhecido";
+      return LOGGI_CODES[normalizeText(carrierStatus)] ?? "desconhecido";
     default:
       return "desconhecido";
   }

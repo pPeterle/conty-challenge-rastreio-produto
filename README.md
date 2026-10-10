@@ -64,7 +64,7 @@ O domínio só conhece `NormalizedEvent`. O formato do agregador (`tracker`, `ch
 
 ## Do payload bruto ao status normalizado
 
-As transportadoras falam dialetos diferentes. Correios manda texto livre, às vezes com complemento (o casamento é por prefixo, sem acento e sem diferenciar maiúsculas). Para `entregue` o prefixo exige "ao destinatário", porque "Objeto entregue ao remetente" ou "à transportadora" também começam com "Objeto entregue" e não significam que o pacote chegou ao criador. Jadlog manda códigos em caixa alta e Loggi manda códigos em inglês. A tabela fica em `src/aggregator/fake/mapping.ts`:
+As transportadoras falam dialetos diferentes. Correios manda texto livre. O casamento é exato depois de normalizar (sem acento, sem diferenciar maiúsculas, espaços colapsados, sem ponto final). Por prefixo, "Objeto entregue ao destinatário errado" ou "Objeto saiu para entrega - cancelada" casariam com uma etapa que não aconteceu. Jadlog manda códigos em caixa alta e Loggi manda códigos em inglês. A tabela fica em `src/aggregator/fake/mapping.ts`:
 
 | transportadora | bruto | normalizado |
 |---|---|---|
@@ -73,7 +73,7 @@ As transportadoras falam dialetos diferentes. Correios manda texto livre, às ve
 | correios | `Objeto saiu para entrega ao destinatário` | `saiu_para_entrega` |
 | correios | `Objeto entregue ao destinatário` | `entregue` |
 | correios | `Objeto devolvido ao remetente`, `Objeto entregue ao remetente` | `excecao` |
-| correios | `Objeto entregue na unidade de origem para devolução`, `Objeto entregue parcialmente` | `desconhecido` |
+| correios | `Objeto entregue ao destinatário errado`, `Objeto saiu para entrega - cancelada`, `Objeto entregue parcialmente` | `desconhecido` |
 | correios | `Objeto não entregue - destinatário ausente` | `excecao` |
 | jadlog | `EMISSAO`, `TRANSFERENCIA`, `EM ROTA`, `ENTREGUE` | `postado`, `em_transito`, `saiu_para_entrega`, `entregue` |
 | loggi | `picked_up`, `in_transit`, `out_for_delivery`, `delivered`, `delivery_failed` | `postado`, `em_transito`, `saiu_para_entrega`, `entregue`, `excecao` |
