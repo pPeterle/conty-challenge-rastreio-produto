@@ -201,6 +201,10 @@ export class Db {
     return inserted;
   }
 
+  updateEventStatus(id: number, status: EventStatus): void {
+    this.raw.prepare("UPDATE tracking_events SET status = ? WHERE id = ?").run(status, id);
+  }
+
   listEvents(shipmentId: string): EventRow[] {
     return this.raw
       .prepare("SELECT * FROM tracking_events WHERE shipment_id = ? ORDER BY occurred_at, id")

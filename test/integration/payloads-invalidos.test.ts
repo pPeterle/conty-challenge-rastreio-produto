@@ -288,6 +288,7 @@ describe("rotas, ids e paginação", () => {
     const t = setup({
       aggregator: {
         supportedCarriers: ["correios"],
+        mapStatus: () => "desconhecido",
         register: async () => {
           throw new Error("detalhe interno: senha do banco");
         },

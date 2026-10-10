@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrackingAggregator, TrackingUpdate, WebhookRequest } from "../../src/aggregator/types.ts";
+import type { EventStatus } from "../../src/domain/status.ts";
 import { InvalidPayloadError, InvalidSignatureError } from "../../src/aggregator/types.ts";
 import { setup } from "./helpers.ts";
 
@@ -9,6 +10,11 @@ import { setup } from "./helpers.ts";
  */
 class OtherAggregator implements TrackingAggregator {
   readonly supportedCarriers = ["qualquer"];
+  private readonly table: Record<string, EventStatus> = { "10": "postado", "90": "entregue" };
+
+  mapStatus(_carrier: string, rawCode: string): EventStatus {
+    return Object.hasOwn(this.table, rawCode) ? this.table[rawCode] : "desconhecido";
+  }
   private codes = new Map<string, string>();
 
   async register(input: { trackingCode: string }) {
@@ -26,12 +32,11 @@ class OtherAggregator implements TrackingAggregator {
     if (request.header("x-other-token") !== "token-ok") throw new InvalidSignatureError("token inválido");
     const body = JSON.parse(request.body);
     if (!body?.parcel) throw new InvalidPayloadError("sem parcel");
-    const map: Record<string, "postado" | "entregue"> = { "10": "postado", "90": "entregue" };
     return {
       ref: body.parcel,
       events: body.history.map((h: any) => ({
         key: `${body.parcel}:${h.seq}`,
-        status: map[h.code] ?? "desconhecido",
+        status: this.mapStatus("qualquer", h.code),
         rawCode: h.code,
         description: null,
         location: null,

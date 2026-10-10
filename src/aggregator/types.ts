@@ -1,4 +1,4 @@
-import type { NormalizedEvent } from "../domain/status.ts";
+import type { EventStatus, NormalizedEvent } from "../domain/status.ts";
 
 /**
  * Contrato com qualquer serviço de rastreio. Trocar de agregador é escrever
@@ -7,6 +7,11 @@ import type { NormalizedEvent } from "../domain/status.ts";
 export interface TrackingAggregator {
   /** Transportadoras cujo dialeto este agregador sabe traduzir. Cadastro fora da lista é recusado. */
   readonly supportedCarriers: readonly string[];
+  /**
+   * Tradução de um código bruto com a tabela atual. O serviço chama de novo a cada
+   * recálculo, então um texto que era desconhecido passa a valer quando a tabela o ganha.
+   */
+  mapStatus(carrier: string, rawCode: string): EventStatus;
   /** Cadastra o código no agregador e devolve a referência dele. Deve ser idempotente. */
   register(input: { trackingCode: string; carrier: string }): Promise<{ ref: string }>;
   /** Consulta o histórico completo (polling). */

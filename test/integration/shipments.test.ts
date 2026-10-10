@@ -64,6 +64,7 @@ describe("cadastro de código de rastreio", () => {
     const t = setup({
       aggregator: {
         supportedCarriers: ["correios"],
+        mapStatus: () => "desconhecido",
         register: async () => {
           throw new AggregatorUnavailableError("agregador inacessível");
         },

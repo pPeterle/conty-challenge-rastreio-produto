@@ -24,11 +24,11 @@ export interface IngestResult {
   newEvents: number;
 }
 
-function rowToEvent(row: EventRow): StoredEvent {
+function rowToEvent(row: EventRow, status: EventRow["status"]): StoredEvent {
   return {
     ignoredReason: row.ignored_reason,
     key: row.event_key,
-    status: row.status,
+    status,
     rawCode: row.raw_code,
     description: row.description,
     location: row.location,
@@ -104,7 +104,8 @@ export class TrackingService {
   /**
    * Grava os eventos novos e recalcula o status a partir do histórico inteiro.
    * Recalcular do zero (em vez de "aplicar o evento ao status atual") é o que
-   * torna o resultado independente da ordem de chegada.
+   * torna o resultado independente da ordem de chegada. O recálculo roda mesmo
+   * sem evento novo e retraduz cada `raw_code` com a tabela atual do adaptador.
    */
   private apply(shipmentId: string, events: readonly NormalizedEvent[]): IngestResult {
     const receivedAt = this.clock.now();
@@ -118,9 +119,18 @@ export class TrackingService {
     return this.db.transaction(() => {
       const before = this.db.findShipment(shipmentId)!;
       const newEvents = this.db.insertEvents(shipmentId, stored, now);
-      if (newEvents === 0) return { shipment: before, newEvents };
 
-      const state = deriveState(this.db.listEvents(shipmentId).map(rowToEvent));
+      const rows = this.db.listEvents(shipmentId);
+      const current = rows.map((row) => {
+        const status = this.aggregator.mapStatus(before.carrier, row.raw_code);
+        // O histórico fica: muda só a tradução, o texto original continua lá.
+        if (status !== row.status) this.db.updateEventStatus(row.id, status);
+        return rowToEvent(row, status);
+      });
+      const retranslated = current.some((e, i) => e.status !== rows[i].status);
+      if (newEvents === 0 && !retranslated) return { shipment: before, newEvents };
+
+      const state = deriveState(current);
       if (state.status !== null && state.status !== before.status) {
         this.db.insertStatusChange(shipmentId, before.status, state.status, now);
       }

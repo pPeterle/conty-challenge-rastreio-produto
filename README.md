@@ -188,6 +188,8 @@ Texto ou código fora da tabela vira `desconhecido`. Ele fica no histórico com 
 
 Pensei em tratar desconhecido como `excecao` e desisti: transportadora muda texto o tempo todo, e cada variação nova pareceria problema no pacote. Também não tento adivinhar. "Objeto entregue ao destinatário errado" e o código Jadlog `ENTREGUE PARCIAL` contêm a palavra "entregue" e viram `desconhecido`. Errar para `entregue` seria o pior caso, porque o prazo de conteúdo do criador começaria a contar sem o produto na mão dele. O custo é que alguém precisa olhar as remessas com `needs_review` e acrescentar o texto na tabela.
 
+A tradução é refeita a cada recálculo a partir do `raw_code` guardado, com a tabela atual. Quando a tabela ganha um texto, o próximo polling ou webhook da remessa (mesmo sem evento novo) passa a contar aqueles eventos e desliga `needs_review` se não sobrar nada pendente. O histórico não perde nada: muda só a coluna `status` do evento, e o texto original fica.
+
 ### Evento com data no futuro
 
 Um evento datado mais de 10 minutos (configurável) depois do instante em que chegou entra no histórico com `ignored_reason: "data_no_futuro"`, fica fora do status e do relógio de trânsito e liga `needs_review`. Preferi guardar a recusar porque o evento pode ser verdadeiro com fuso trocado, e alguém precisa ver isso. A decisão é tomada na chegada e fica gravada. Se o mesmo evento for reenviado depois, ele cai no dedupe e continua ignorado.
