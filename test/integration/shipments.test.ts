@@ -145,6 +145,20 @@ describe("eventos fora de ordem", () => {
     expect(res.body.shipment.status_changes.map((c: any) => c.to)).toEqual(["saiu_para_entrega"]);
   });
 
+  it("leitura mais nova de etapa menor não rebaixa o status", async () => {
+    const t = setup();
+    const s = await t.register();
+    await t.carrierEvent(s.aggregator_ref, "Objeto saiu para entrega ao destinatário", "2026-10-09T08:00:00Z");
+    await t.call("POST", `/shipments/${s.id}/refresh`);
+    // Evento real e mais recente, mas de uma etapa anterior (voltou para a unidade).
+    await t.carrierEvent(s.aggregator_ref, "Objeto em trânsito - por favor aguarde", "2026-10-09T15:00:00Z");
+    const res = await t.call("POST", `/shipments/${s.id}/refresh`);
+    expect(res.body.new_events).toBe(1);
+    expect(res.body.shipment.status).toBe("saiu_para_entrega");
+    expect(res.body.shipment.events.map((e: any) => e.status)).toEqual(["saiu_para_entrega", "em_transito"]);
+    expect(res.body.shipment.status_changes.map((c: any) => c.to)).toEqual(["saiu_para_entrega"]);
+  });
+
   it("webhook com evento antigo depois do entregue não tira a remessa de entregue", async () => {
     const t = setup();
     const s = await t.register("LG123456", "loggi");

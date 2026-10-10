@@ -147,7 +147,7 @@ O histórico sai em ordem cronológica e com horário em UTC. O status desconhec
 
 A cada evento novo, `deriveState` (`src/domain/status.ts`) recalcula o status a partir de todos os eventos da remessa, e o resultado é o mesmo em qualquer ordem de chegada. Um teste unitário confere isso com todas as permutações de um histórico. As regras:
 
-1. Eventos de progresso têm rank: `postado` 1, `em_transito` 2, `saiu_para_entrega` 3, `entregue` 4. O status é o maior rank já visto. Um evento antigo que chega depois não diminui esse máximo, então o status não regride.
+1. Eventos de progresso têm rank: `postado` 1, `em_transito` 2, `saiu_para_entrega` 3, `entregue` 4. O status é o maior rank já visto. Um evento antigo que chega depois não diminui esse máximo, então o status não regride. Uma leitura mais nova de etapa menor (o pacote saiu para entrega e depois aparece "em trânsito") também não rebaixa: é uma decisão consciente. Para quem acompanha a campanha, o que importa é a etapa mais avançada já alcançada, e deixar o status ir e voltar a cada leitura interna da transportadora geraria ruído sem informação nova. Quando algo dá errado de fato, a transportadora manda uma exceção, e esse é o único caminho que tira o status da etapa alcançada.
 2. `entregue` é terminal. Uma exceção posterior fica no histórico, mas o status continua `entregue`.
 3. `excecao` vale enquanto nenhum evento de progresso tiver horário estritamente posterior à exceção mais recente. Um avanço posterior resolve a exceção, e o status volta ao maior rank já alcançado (se o pacote já tinha saído para entrega e volta para o centro de distribuição depois de uma tentativa falha, o status fica `saiu_para_entrega`). Exceção antiga chegando atrasada não derruba um avanço mais novo. No empate de horário a exceção prevalece, por ser o lado mais conservador.
 4. Eventos `desconhecido` são ignorados no cálculo.
@@ -342,6 +342,7 @@ Os thresholds são p95 < 250 ms, taxa de erro < 1% e checks > 99%. Os números v
 - Rotação de segredo do webhook e proteção contra replay (timestamp assinado).
 - Autenticação da própria API.
 - Correção de evento já recebido (mesmo `checkpoint_id` com dados diferentes): hoje vale a primeira versão, sem aviso.
+- A mesma ocorrência reemitida pelo agregador com outro `checkpoint_id` duplica o histórico, porque a identidade do evento é o id quando ele existe. O status não muda (o cálculo usa o conjunto), mas a linha aparece duas vezes.
 
 ## O que eu faria diferente com mais tempo
 

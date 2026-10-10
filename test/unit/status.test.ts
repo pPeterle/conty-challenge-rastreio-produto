@@ -53,6 +53,11 @@ describe("deriveState", () => {
     expect(deriveState(withLateOldEvent).status).toBe("saiu_para_entrega");
   });
 
+  it("leitura mais nova de etapa menor não rebaixa o status", () => {
+    const events = [ev("saiu_para_entrega", "2026-10-03T08:00:00Z"), ev("em_transito", "2026-10-03T11:00:00Z")];
+    expect(deriveState(events)).toMatchObject({ status: "saiu_para_entrega", since: new Date("2026-10-03T08:00:00Z") });
+  });
+
   it("status desconhecido nunca vira entregue nem muda o status, mas pede revisão", () => {
     const events = [ev("em_transito", "2026-10-02T10:00:00Z"), ev("desconhecido", "2026-10-05T10:00:00Z", "Pacote teletransportado")];
     expect(deriveState(events)).toMatchObject({ status: "em_transito", needsReview: true });
