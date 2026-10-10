@@ -160,13 +160,13 @@ Para o volume esperado aqui (remessas por campanha, poucos eventos por pacote, w
 
 ## Teste de carga
 
-`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real, nesta máquina (2026-10-10):
+`npm run load` cadastra 40 remessas em 4 cenários e roda o k6 por 30 s com até 50 VUs, misturando webhooks repetidos e fora de ordem, polling, job de atraso, webhooks forjados e payloads inválidos. No fim, um script confere as invariantes. Última execução real, nesta máquina (2026-10-10, load average perto de 7):
 
 ```
-   ✓ checks.........................: 100.00% 99894 out of 99894
-   ✓ http_req_duration..............: avg=12.52ms min=103.83µs med=6.99ms  max=378.12ms p(90)=26.4ms  p(95)=35.37ms
-   ✓ http_req_failed................: 0.00%   0 out of 99935
-     http_reqs......................: 99935   3329.336415/s
+   ✓ checks.........................: 100.00% 160565 out of 160565
+   ✓ http_req_duration..............: avg=7.8ms   min=99.79µs  med=5.06ms  max=63.4ms   p(90)=19.45ms p(95)=22.11ms
+   ✓ http_req_failed................: 0.00%   0 out of 160606
+     http_reqs......................: 160606  5351.111363/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 

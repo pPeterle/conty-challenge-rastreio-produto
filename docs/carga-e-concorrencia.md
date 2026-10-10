@@ -38,7 +38,7 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
 
 ### Resultado
 
-Última execução real, nesta máquina (macOS, k6 0.54.0 no Docker, 2026-10-10):
+Última execução real, nesta máquina (macOS, k6 0.54.0 no Docker, 2026-10-10, load average perto de 7):
 
 ```
      ✓ refresh 200
@@ -46,11 +46,11 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
      ✓ payload inválido 400
      ✓ webhook forjado 401
      ✓ check-delays 200
-   ✓ checks.........................: 100.00% 99894 out of 99894
-   ✓ http_req_duration..............: avg=12.52ms min=103.83µs med=6.99ms  max=378.12ms p(90)=26.4ms  p(95)=35.37ms
-   ✓ http_req_failed................: 0.00%   0 out of 99935
-     http_reqs......................: 99935   3329.336415/s
+   ✓ checks.........................: 100.00% 160565 out of 160565
+   ✓ http_req_duration..............: avg=7.8ms   min=99.79µs  med=5.06ms  max=63.4ms   p(90)=19.45ms p(95)=22.11ms
+   ✓ http_req_failed................: 0.00%   0 out of 160606
+     http_reqs......................: 160606  5351.111363/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 
-Os números variam bastante entre execuções na mesma máquina. Nas rodadas que fiz ao longo do desenvolvimento (as primeiras ainda sem payloads inválidos no cenário), a vazão ficou entre 1594 e 4731 req/s e o p95 entre 23,91 ms e 85,01 ms.
+Os números variam bastante entre execuções na mesma máquina. Nas rodadas que fiz ao longo do desenvolvimento (as primeiras ainda sem payloads inválidos no cenário), a vazão ficou entre 1594 e 5351 req/s e o p95 entre 22,11 ms e 85,01 ms.
