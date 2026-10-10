@@ -287,12 +287,13 @@ describe("validação do payload do agregador", () => {
     },
   );
 
-  it("polling com checkpoint_time sem fuso também é recusado", async () => {
+  it("polling com checkpoint_time sem fuso é recusado como resposta inválida do agregador (502)", async () => {
     const t = setup();
     const s = await t.register();
     await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-01T10:00:00");
     const res = await t.call("POST", `/shipments/${s.id}/refresh`);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe("agregador_resposta_invalida");
   });
 
   it("webhook com transportadora diferente da cadastrada responde 400", async () => {
@@ -300,6 +301,6 @@ describe("validação do payload do agregador", () => {
     const s = await t.register();
     const res = await t.webhook(payload(s.aggregator_ref, "2026-10-01T10:00:00Z", "loggi"));
     expect(res.status).toBe(400);
-    expect(res.body.error.message).toContain("não confere com a cadastrada");
+    expect(res.body.error.message).toContain("transportadora loggi não confere com a cadastrada (correios)");
   });
 });

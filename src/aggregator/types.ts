@@ -21,6 +21,8 @@ export interface TrackingUpdate {
   ref: string;
   /** Transportadora que o agregador informou, quando ele informa. */
   carrier?: string;
+  /** Código de rastreio que o agregador devolveu, quando ele devolve. */
+  trackingCode?: string;
   events: NormalizedEvent[];
 }
 
@@ -41,3 +43,13 @@ export class InvalidPayloadError extends Error {
 export class InvalidSignatureError extends Error {}
 
 export class AggregatorUnavailableError extends Error {}
+
+/** O agregador respondeu, mas com algo que não dá para usar (HTML, formato errado, outra remessa). */
+export class AggregatorResponseError extends Error {
+  constructor(
+    message: string,
+    readonly details?: Array<{ path: string; message: string }>,
+  ) {
+    super(message);
+  }
+}

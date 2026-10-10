@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { InvalidPayloadError, type TrackingAggregator, type TrackingUpdate, type WebhookRequest } from "./aggregator/types.ts";
+import {
+  AggregatorResponseError,
+  InvalidPayloadError,
+  type TrackingAggregator, type TrackingUpdate, type WebhookRequest } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { Db, EventRow, ShipmentRow } from "./db.ts";
 import { isDelayed } from "./domain/delay.ts";
@@ -61,6 +64,8 @@ export class TrackingService {
     const shipment = this.db.findShipment(shipmentId);
     if (!shipment) throw new NotFoundError(`remessa ${shipmentId} não encontrada`);
     const update = await this.aggregator.getTracking(shipment.aggregator_ref);
+    const mismatch = this.mismatch(shipment, update);
+    if (mismatch) throw new AggregatorResponseError(`agregador devolveu dados de outra remessa: ${mismatch}`);
     return this.apply(shipment.id, update.events);
   }
 
@@ -69,13 +74,26 @@ export class TrackingService {
     const update: TrackingUpdate = this.aggregator.parseWebhook(request);
     const shipment = this.db.findShipmentByRef(update.ref);
     if (!shipment) throw new NotFoundError(`nenhuma remessa cadastrada para a referência ${update.ref}`);
-    // O dialeto é escolhido pela transportadora; se ela diverge do cadastro, a tradução não é confiável.
-    if (update.carrier !== undefined && update.carrier.toLowerCase() !== shipment.carrier) {
-      throw new InvalidPayloadError(
-        `transportadora ${update.carrier} não confere com a cadastrada (${shipment.carrier}) para ${update.ref}`,
-      );
-    }
+    const mismatch = this.mismatch(shipment, update);
+    if (mismatch) throw new InvalidPayloadError(`webhook não confere com a remessa cadastrada: ${mismatch}`);
     return this.apply(shipment.id, update.events);
+  }
+
+  /**
+   * Confere se o que o agregador mandou é mesmo desta remessa. A transportadora
+   * importa porque o dialeto é escolhido por ela.
+   */
+  private mismatch(shipment: ShipmentRow, update: TrackingUpdate): string | null {
+    if (update.ref !== shipment.aggregator_ref) {
+      return `referência ${update.ref}, esperada ${shipment.aggregator_ref}`;
+    }
+    if (update.carrier !== undefined && update.carrier.trim().toLowerCase() !== shipment.carrier) {
+      return `transportadora ${update.carrier} não confere com a cadastrada (${shipment.carrier})`;
+    }
+    if (update.trackingCode !== undefined && update.trackingCode.trim().toUpperCase() !== shipment.tracking_code) {
+      return `código de rastreio ${update.trackingCode} não confere com o cadastrado (${shipment.tracking_code})`;
+    }
+    return null;
   }
 
   /**

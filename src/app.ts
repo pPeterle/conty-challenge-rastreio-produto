@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import type { ZodError } from "zod";
 import {
+  AggregatorResponseError,
   AggregatorUnavailableError,
   InvalidPayloadError,
   InvalidSignatureError,
@@ -100,6 +101,9 @@ export function createApp(deps: AppDeps) {
       return fail(c, 400, "validacao", "o corpo não é JSON válido");
     }
     if (error instanceof AggregatorUnavailableError) return fail(c, 502, "agregador_indisponivel", error.message);
+    if (error instanceof AggregatorResponseError) {
+      return fail(c, 502, "agregador_resposta_invalida", error.message, error.details);
+    }
     console.error(error);
     return c.json({ error: { code: "erro_interno", message: "erro inesperado" } }, 500);
   });

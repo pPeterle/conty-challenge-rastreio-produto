@@ -1,4 +1,5 @@
 import {
+  AggregatorResponseError,
   AggregatorUnavailableError,
   InvalidPayloadError,
   InvalidSignatureError,
@@ -22,10 +23,16 @@ export interface FakeAggregatorClientOptions {
   timeoutMs?: number;
 }
 
-function parseTracker(body: unknown): RawTracker {
+/**
+ * Mesmo schema para os dois caminhos, com culpas diferentes: webhook malformado
+ * é erro de quem chamou (400); resposta malformada no polling é falha do agregador (502).
+ */
+function parseTracker(body: unknown, source: "webhook" | "resposta"): RawTracker {
   const result = rawEnvelopeSchema.safeParse(body);
   if (!result.success) {
-    throw new InvalidPayloadError(`payload do agregador inválido: ${summarize(result.error)}`, issuesOf(result.error));
+    const message = `${source === "webhook" ? "payload" : "resposta"} do agregador inválida: ${summarize(result.error)}`;
+    const ErrorClass = source === "webhook" ? InvalidPayloadError : AggregatorResponseError;
+    throw new ErrorClass(message, issuesOf(result.error));
   }
   return result.data.tracker;
 }
@@ -34,6 +41,7 @@ function toUpdate(tracker: RawTracker): TrackingUpdate {
   return {
     ref: tracker.id,
     carrier: tracker.carrier,
+    trackingCode: tracker.tracking_number,
     events: tracker.checkpoints.map((checkpoint) => toNormalizedEvent(tracker.carrier, checkpoint)),
   };
 }
@@ -58,12 +66,18 @@ export class FakeAggregatorClient implements TrackingAggregator {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ tracking_number: input.trackingCode, carrier: input.carrier }),
     });
-    return { ref: parseTracker(body).id };
+    const tracker = parseTracker(body, "resposta");
+    if (tracker.tracking_number.toUpperCase() !== input.trackingCode.toUpperCase()) {
+      throw new AggregatorResponseError(
+        `agregador cadastrou ${tracker.tracking_number} quando foi pedido ${input.trackingCode}`,
+      );
+    }
+    return { ref: tracker.id };
   }
 
   async getTracking(ref: string): Promise<TrackingUpdate> {
     const body = await this.call(`/v1/trackers/${encodeURIComponent(ref)}`, { method: "GET" });
-    return toUpdate(parseTracker(body));
+    return toUpdate(parseTracker(body, "resposta"));
   }
 
   parseWebhook(request: WebhookRequest): TrackingUpdate {
@@ -83,7 +97,7 @@ export class FakeAggregatorClient implements TrackingAggregator {
     } catch {
       throw new InvalidPayloadError("corpo não é JSON válido");
     }
-    return toUpdate(parseTracker(body));
+    return toUpdate(parseTracker(body, "webhook"));
   }
 
   private async call(path: string, init: RequestInit): Promise<unknown> {
@@ -102,7 +116,7 @@ export class FakeAggregatorClient implements TrackingAggregator {
     try {
       return await response.json();
     } catch {
-      throw new InvalidPayloadError("agregador respondeu algo que não é JSON");
+      throw new AggregatorResponseError(`agregador respondeu algo que não é JSON em ${path}`);
     }
   }
 }
