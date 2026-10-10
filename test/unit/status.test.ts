@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { deriveState, type EventStatus, type NormalizedEvent } from "../../src/domain/status.ts";
 
 let seq = 0;
-function ev(status: EventStatus, occurredAt: string, rawCode = status): NormalizedEvent {
+function ev(status: EventStatus, occurredAt: string, rawCode: string = status): NormalizedEvent {
   return { key: `k${++seq}`, status, rawCode, description: null, location: null, occurredAt: new Date(occurredAt) };
 }
 
