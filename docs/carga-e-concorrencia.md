@@ -33,7 +33,7 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
    | 5% | job de atraso | 200 |
 
    Para o k6, 4xx conta como resposta esperada (`http.setResponseCallback`), e os checks conferem o status exato de cada ação. Os thresholds são p95 < 500 ms, taxa de erro < 1% e checks > 99%. O teto de latência é folgado para a carga passar em máquinas mais lentas; o que reprova a rodada de verdade são os checks, a taxa de erro e a verificação do passo 4.
-4. `scripts/verify-load.ts` roda o job de atraso uma última vez e confere, para cada remessa, a quantidade de eventos, a ausência de duplicatas, o status final, `needs_review`, a quantidade de alertas e se alguma mudança de status andou para trás. Se algo quebrar, sai com código 1.
+4. `scripts/verify-load.ts` roda o job de atraso uma última vez (que reconsulta o agregador antes de alertar) e confere, para cada remessa, a quantidade de eventos, a ausência de duplicatas, o status final, `needs_review`, a quantidade de alertas e se alguma mudança de status andou para trás. Se algo quebrar, sai com código 1.
 5. Encerra o servidor e apaga o banco temporário.
 
 ### Resultado
@@ -41,15 +41,15 @@ Com mais de um processo, eu trocaria o sqlite por Postgres com as mesmas restri�
 Última execução real, nesta máquina (macOS, k6 0.54.0 no Docker, 2026-10-10):
 
 ```
-     ✓ webhook 200
      ✓ refresh 200
+     ✓ webhook 200
      ✓ payload inválido 400
-     ✓ check-delays 200
      ✓ webhook forjado 401
-   ✓ checks.........................: 100.00% 129945 out of 129945
-   ✓ http_req_duration..............: avg=9.63ms  min=92.46µs  med=6.32ms max=64.23ms p(90)=23.63ms p(95)=27.01ms
-   ✓ http_req_failed................: 0.00%   0 out of 129986
-     http_reqs......................: 129986  4327.309506/s
+     ✓ check-delays 200
+   ✓ checks.........................: 100.00% 99894 out of 99894
+   ✓ http_req_duration..............: avg=12.52ms min=103.83µs med=6.99ms  max=378.12ms p(90)=26.4ms  p(95)=35.37ms
+   ✓ http_req_failed................: 0.00%   0 out of 99935
+     http_reqs......................: 99935   3329.336415/s
 verificação ok: 40 remessas, 140 eventos únicos, 20 alertas, nenhum status regrediu
 ```
 

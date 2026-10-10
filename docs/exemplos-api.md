@@ -1,6 +1,6 @@
 # Exemplos reais com curl
 
-Gerei estes exemplos com a API rodando localmente (`AGGREGATOR_WEBHOOK_SECRET=segredo-local DELAY_LIMIT_HOURS=72 npm start`) em 2026-10-10, por volta de 04:17 UTC. Os ids mudam a cada execução.
+Gerei estes exemplos com a API rodando localmente (`AGGREGATOR_WEBHOOK_SECRET=segredo-local DELAY_LIMIT_HOURS=72 npm start`) em 2026-10-10, por volta de 13:01 UTC. Os ids mudam a cada execução.
 
 ## Cadastro
 
@@ -10,7 +10,7 @@ curl -s -X POST localhost:3105/shipments -H 'content-type: application/json' \
 ```
 
 ```json
-{"id":"shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
+{"id":"shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":null,"status_since":null,"transit_started_at":null,"delivered_at":null,"content_due_at":null,"delayed":false,"needs_review":false,"events":[],"status_changes":[],"alerts":[]}
 ```
 
 Repetir o mesmo cadastro devolve 200 com a mesma remessa.
@@ -42,7 +42,7 @@ curl -s -X POST localhost:3105/webhooks/aggregator -H 'content-type: application
 ```
 
 ```json
-{"new_events":0,"shipment_id":"shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4","status":"em_transito"}
+{"new_events":0,"shipment_id":"shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12","status":"em_transito"}
 ```
 
 Webhook forjado dizendo "entregue", primeiro sem assinatura e depois com a assinatura de outro corpo (os dois respondem 401):
@@ -61,8 +61,8 @@ curl -s -X POST localhost:3105/jobs/check-delays
 ```
 
 ```json
-{"checked":1,"delayed":["shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4"],"alerts_created":["shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4"]}
-{"checked":1,"delayed":["shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4"],"alerts_created":[]}
+{"checked":1,"delayed":["shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12"],"alerts_created":["shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12"],"stale_alerts":[]}
+{"checked":1,"delayed":["shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12"],"alerts_created":[],"stale_alerts":[]}
 ```
 
 ```bash
@@ -70,7 +70,7 @@ curl -s localhost:3105/alerts
 ```
 
 ```json
-{"limit":50,"offset":0,"alerts":[{"id":1,"shipment_id":"shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4","kind":"atraso","details":{"status":"em_transito","needs_review":true,"transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":80.6,"limit_hours":72},"created_at":"2026-10-10T04:17:52.336Z"}]}
+{"limit":50,"offset":0,"include_resolved":false,"alerts":[{"id":1,"shipment_id":"shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12","kind":"atraso","details":{"status":"em_transito","needs_review":true,"transit_started_at":"2026-10-06T19:40:00.000Z","elapsed_hours":89.4,"limit_hours":72},"stale":false,"created_at":"2026-10-10T13:01:55.521Z","resolved_at":null}]}
 ```
 
 ## Listagem
@@ -80,7 +80,7 @@ curl -s 'localhost:3105/shipments?limit=1'
 ```
 
 ```json
-{"limit":1,"offset":0,"shipments":[{"id":"shp_9d725a1c-b419-47b4-9142-f2c068c2bcb4","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":"em_transito","status_since":"2026-10-08T12:12:00.000Z","transit_started_at":"2026-10-06T19:40:00.000Z","delivered_at":null,"delayed":true,"needs_review":true}]}
+{"limit":1,"offset":0,"shipments":[{"id":"shp_9d9af6dd-f587-4bd0-bd3f-96d5d67b4d12","carrier":"correios","tracking_code":"QB123456789BR","aggregator_ref":"trk_1","status":"em_transito","status_since":"2026-10-08T12:12:00.000Z","transit_started_at":"2026-10-06T19:40:00.000Z","delivered_at":null,"content_due_at":null,"delayed":true,"needs_review":true}]}
 ```
 
 ## Validação
