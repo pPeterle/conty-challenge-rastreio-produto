@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { TrackingAggregator, TrackingUpdate } from "../../src/aggregator/types.ts";
-import { InvalidPayloadError } from "../../src/aggregator/types.ts";
+import type { TrackingAggregator, TrackingUpdate, WebhookRequest } from "../../src/aggregator/types.ts";
+import { InvalidPayloadError, InvalidSignatureError } from "../../src/aggregator/types.ts";
 import { setup } from "./helpers.ts";
 
 /**
@@ -20,7 +20,10 @@ class OtherAggregator implements TrackingAggregator {
     return { ref, events: [] };
   }
 
-  parseWebhook(body: any): TrackingUpdate {
+  parseWebhook(request: WebhookRequest): TrackingUpdate {
+    // Este agregador autentica por token fixo num header próprio.
+    if (request.header("x-other-token") !== "token-ok") throw new InvalidSignatureError("token inválido");
+    const body = JSON.parse(request.body);
     if (!body?.parcel) throw new InvalidPayloadError("sem parcel");
     const map: Record<string, "postado" | "entregue"> = { "10": "postado", "90": "entregue" };
     return {
@@ -43,7 +46,7 @@ describe("troca de agregador", () => {
     const s = await t.register("ABC12345", "qualquer");
     expect(s.aggregator_ref).toBe("other-ABC12345");
 
-    const res = await t.call("POST", "/webhooks/aggregator", {
+    const body = JSON.stringify({
       parcel: s.aggregator_ref,
       history: [
         { seq: 2, code: "90", ts: 1_760_000_000 },
@@ -51,7 +54,12 @@ describe("troca de agregador", () => {
         { seq: 3, code: "77", ts: 1_760_100_000 },
       ],
     });
-    expect(res.body).toMatchObject({ new_events: 3, status: "entregue" });
+    const res = await t.app.request("/webhooks/aggregator", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-other-token": "token-ok" },
+      body,
+    });
+    expect(await res.json()).toMatchObject({ new_events: 3, status: "entregue" });
     const shipment = (await t.call("GET", `/shipments/${s.id}`)).body;
     expect(shipment.events.map((e: any) => e.status)).toEqual(["postado", "entregue", "desconhecido"]);
   });

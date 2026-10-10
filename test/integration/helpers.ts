@@ -1,4 +1,5 @@
 import { FakeAggregatorClient } from "../../src/aggregator/fake/client.ts";
+import { SIGNATURE_HEADER, signBody } from "../../src/aggregator/fake/signature.ts";
 import type { TrackingAggregator } from "../../src/aggregator/types.ts";
 import { createApp } from "../../src/app.ts";
 import { FixedClock } from "../../src/clock.ts";
@@ -7,6 +8,7 @@ import { createFakeAggregatorApp } from "../../src/fake-aggregator/app.ts";
 
 export const HOUR = 3_600_000;
 const AGG = "http://agregador.test";
+export const WEBHOOK_SECRET = "segredo-de-teste";
 
 export function setup(options: { delayLimitHours?: number; now?: string; aggregator?: TrackingAggregator } = {}) {
   const fake = createFakeAggregatorApp();
@@ -15,7 +17,7 @@ export function setup(options: { delayLimitHours?: number; now?: string; aggrega
   // O cliente HTTP real, com o fetch apontado para o app fictício em memória.
   const aggregator =
     options.aggregator ??
-    new FakeAggregatorClient({ baseUrl: AGG, fetch: (url, init) => Promise.resolve(fake.request(url, init)) });
+    new FakeAggregatorClient({ baseUrl: AGG, webhookSecret: WEBHOOK_SECRET, fetch: (url, init) => Promise.resolve(fake.request(url, init)) });
   const app = createApp({
     db,
     clock,
@@ -29,6 +31,15 @@ export function setup(options: { delayLimitHours?: number; now?: string; aggrega
       headers: body === undefined ? {} : { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    return { status: res.status, body: (await res.json()) as any };
+  }
+
+  /** Webhook como o agregador mandaria: corpo assinado com o segredo compartilhado. */
+  async function webhook(payload: unknown, signature?: string | null) {
+    const body = JSON.stringify(payload);
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (signature !== null) headers[SIGNATURE_HEADER] = signature ?? signBody(body, WEBHOOK_SECRET);
+    const res = await app.request("/webhooks/aggregator", { method: "POST", headers, body });
     return { status: res.status, body: (await res.json()) as any };
   }
 
@@ -52,5 +63,5 @@ export function setup(options: { delayLimitHours?: number; now?: string; aggrega
     return (await res.json()) as any;
   }
 
-  return { app, db, clock, fake, call, register, carrierEvent, rawTracker };
+  return { app, db, clock, fake, call, webhook, register, carrierEvent, rawTracker };
 }

@@ -9,8 +9,12 @@ export interface TrackingAggregator {
   register(input: { trackingCode: string; carrier: string }): Promise<{ ref: string }>;
   /** Consulta o histórico completo (polling). */
   getTracking(ref: string): Promise<TrackingUpdate>;
-  /** Traduz o corpo de um webhook do agregador. Lança InvalidPayloadError se não reconhecer. */
-  parseWebhook(body: unknown): TrackingUpdate;
+  /**
+   * Autentica e traduz um webhook do agregador. Recebe o corpo bruto porque a
+   * assinatura é calculada sobre os bytes, não sobre o JSON reinterpretado.
+   * Lança InvalidSignatureError ou InvalidPayloadError.
+   */
+  parseWebhook(request: WebhookRequest): TrackingUpdate;
 }
 
 export interface TrackingUpdate {
@@ -18,6 +22,13 @@ export interface TrackingUpdate {
   events: NormalizedEvent[];
 }
 
+export interface WebhookRequest {
+  body: string;
+  header(name: string): string | undefined;
+}
+
 export class InvalidPayloadError extends Error {}
+
+export class InvalidSignatureError extends Error {}
 
 export class AggregatorUnavailableError extends Error {}

@@ -1,16 +1,21 @@
 import {
   AggregatorUnavailableError,
   InvalidPayloadError,
+  InvalidSignatureError,
   type TrackingAggregator,
   type TrackingUpdate,
+  type WebhookRequest,
 } from "../types.ts";
 import { toNormalizedEvent } from "./mapping.ts";
+import { isValidSignature, SIGNATURE_HEADER } from "./signature.ts";
 import type { RawCheckpoint, RawTracker } from "./raw.ts";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export interface FakeAggregatorClientOptions {
   baseUrl: string;
+  /** Segredo compartilhado com o agregador para validar a assinatura dos webhooks. */
+  webhookSecret: string;
   /** Permite injetar o fetch (nos testes ele aponta direto para o app fictício). */
   fetch?: FetchLike;
   timeoutMs?: number;
@@ -63,8 +68,11 @@ export class FakeAggregatorClient implements TrackingAggregator {
   private readonly baseUrl: string;
   private readonly fetchFn: FetchLike;
   private readonly timeoutMs: number;
+  private readonly webhookSecret: string;
 
   constructor(options: FakeAggregatorClientOptions) {
+    if (!options.webhookSecret) throw new Error("webhookSecret é obrigatório");
+    this.webhookSecret = options.webhookSecret;
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchFn = options.fetch ?? ((input, init) => fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? 5000;
@@ -84,7 +92,18 @@ export class FakeAggregatorClient implements TrackingAggregator {
     return toUpdate(parseTracker(body));
   }
 
-  parseWebhook(body: unknown): TrackingUpdate {
+  parseWebhook(request: WebhookRequest): TrackingUpdate {
+    const signature = request.header(SIGNATURE_HEADER);
+    if (!signature) throw new InvalidSignatureError(`header ${SIGNATURE_HEADER} ausente`);
+    if (!isValidSignature(request.body, signature, this.webhookSecret)) {
+      throw new InvalidSignatureError(`assinatura do header ${SIGNATURE_HEADER} não confere com o corpo`);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(request.body);
+    } catch {
+      throw new InvalidPayloadError("corpo não é JSON válido");
+    }
     return toUpdate(parseTracker(body));
   }
 

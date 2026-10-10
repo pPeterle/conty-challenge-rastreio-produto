@@ -1,5 +1,10 @@
 import { Hono, type Context } from "hono";
-import { AggregatorUnavailableError, InvalidPayloadError, type TrackingAggregator } from "./aggregator/types.ts";
+import {
+  AggregatorUnavailableError,
+  InvalidPayloadError,
+  InvalidSignatureError,
+  type TrackingAggregator,
+} from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { AlertRow, Db, ShipmentRow } from "./db.ts";
 import { NotFoundError, TrackingService, type TrackingConfig } from "./service.ts";
@@ -11,7 +16,7 @@ export interface AppDeps {
   config: TrackingConfig;
 }
 
-type ErrorStatus = 400 | 404 | 502;
+type ErrorStatus = 400 | 401 | 404 | 502;
 
 function fail(c: Context, status: ErrorStatus, code: string, message: string) {
   return c.json({ error: { code, message } }, status);
@@ -53,6 +58,7 @@ export function createApp(deps: AppDeps) {
 
   app.onError((error, c) => {
     if (error instanceof NotFoundError) return fail(c, 404, "nao_encontrado", error.message);
+    if (error instanceof InvalidSignatureError) return fail(c, 401, "assinatura_invalida", error.message);
     if (error instanceof InvalidPayloadError) return fail(c, 400, "payload_invalido", error.message);
     if (error instanceof AggregatorUnavailableError) return fail(c, 502, "agregador_indisponivel", error.message);
     console.error(error);
@@ -91,10 +97,9 @@ export function createApp(deps: AppDeps) {
   });
 
   app.post("/webhooks/aggregator", async (c) => {
-    const body = await c.req.json().catch(() => {
-      throw new InvalidPayloadError("corpo não é JSON válido");
-    });
-    const { shipment, newEvents } = service.ingestWebhook(body);
+    // Corpo bruto: a assinatura vale para os bytes recebidos.
+    const body = await c.req.text();
+    const { shipment, newEvents } = service.ingestWebhook({ body, header: (name) => c.req.header(name) });
     return c.json({ new_events: newEvents, shipment_id: shipment.id, status: shipment.status });
   });
 

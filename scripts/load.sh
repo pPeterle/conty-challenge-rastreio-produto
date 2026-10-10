@@ -8,6 +8,7 @@ PORT="${PORT:-3105}"
 AGG_PORT="${FAKE_AGGREGATOR_PORT:-3115}"
 TMP_DIR="$(mktemp -d)"
 EXPECTED_FILE="$TMP_DIR/expected.json"
+WEBHOOK_SECRET="segredo-da-carga"
 
 # Um servidor esquecido de outra rodada responderia no lugar deste e falsearia o resultado.
 for p in "$PORT" "$AGG_PORT"; do
@@ -15,7 +16,7 @@ for p in "$PORT" "$AGG_PORT"; do
 done
 
 PORT="$PORT" FAKE_AGGREGATOR_PORT="$AGG_PORT" AGGREGATOR_URL="http://localhost:$AGG_PORT" \
-  DB_PATH="$TMP_DIR/load.db" DELAY_LIMIT_HOURS=72 \
+  DB_PATH="$TMP_DIR/load.db" DELAY_LIMIT_HOURS=72 AGGREGATOR_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
   NODE_OPTIONS='--disable-warning=ExperimentalWarning' npx tsx src/index.ts > "$TMP_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 cleanup() {
@@ -40,6 +41,7 @@ docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
   -e BASE_URL="http://host.docker.internal:$PORT" \
   -e AGG_URL="http://host.docker.internal:$AGG_PORT" \
+  -e WEBHOOK_SECRET="$WEBHOOK_SECRET" \
   grafana/k6:0.54.0 run --quiet - < load/tracking.js
 
 NODE_OPTIONS='--disable-warning=ExperimentalWarning' npx tsx scripts/verify-load.ts

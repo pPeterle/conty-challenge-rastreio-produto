@@ -9,7 +9,14 @@ import { createFakeAggregatorApp } from "./fake-aggregator/app.ts";
 const config = loadConfig();
 
 if (config.startFakeAggregator) {
-  serve({ fetch: createFakeAggregatorApp().fetch, port: config.fakeAggregatorPort }, () => {
+  const fakeAggregator = createFakeAggregatorApp({
+    webhook: {
+      secret: config.webhookSecret,
+      send: (body, headers) =>
+        fetch(`http://localhost:${config.port}/webhooks/aggregator`, { method: "POST", headers, body }),
+    },
+  });
+  serve({ fetch: fakeAggregator.fetch, port: config.fakeAggregatorPort }, () => {
     console.log(`agregador fictício em http://localhost:${config.fakeAggregatorPort}`);
   });
 }
@@ -17,7 +24,7 @@ if (config.startFakeAggregator) {
 const app = createApp({
   db: new Db(config.dbPath),
   clock: systemClock,
-  aggregator: new FakeAggregatorClient({ baseUrl: config.aggregatorUrl }),
+  aggregator: new FakeAggregatorClient({ baseUrl: config.aggregatorUrl, webhookSecret: config.webhookSecret }),
   config: config.tracking,
 });
 

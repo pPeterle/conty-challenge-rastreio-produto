@@ -136,7 +136,7 @@ describe("eventos fora de ordem", () => {
     const t = setup();
     const s = await t.register("LG123456", "loggi");
     const webhook = (checkpoints: unknown[]) =>
-      t.call("POST", "/webhooks/aggregator", {
+      t.webhook({
         tracker: { id: s.aggregator_ref, tracking_number: "LG123456", carrier: "loggi", checkpoints },
       });
 
@@ -196,8 +196,8 @@ describe("webhook do agregador", () => {
     await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-09T10:00:00Z");
     const payload = await t.rawTracker(s.aggregator_ref);
 
-    const first = await t.call("POST", "/webhooks/aggregator", payload);
-    const again = await t.call("POST", "/webhooks/aggregator", payload);
+    const first = await t.webhook(payload);
+    const again = await t.webhook(payload);
     expect(first.body).toMatchObject({ new_events: 1, status: "postado" });
     expect(again.body).toMatchObject({ new_events: 0, status: "postado" });
   });
@@ -206,7 +206,7 @@ describe("webhook do agregador", () => {
     const t = setup();
     const s = await t.register();
     await t.carrierEvent(s.aggregator_ref, "Objeto postado", "2026-10-09T10:00:00Z");
-    await t.call("POST", "/webhooks/aggregator", await t.rawTracker(s.aggregator_ref));
+    await t.webhook(await t.rawTracker(s.aggregator_ref));
     const poll = await t.call("POST", `/shipments/${s.id}/refresh`);
     expect(poll.body.new_events).toBe(0);
     expect(poll.body.shipment.events).toHaveLength(1);
@@ -223,18 +223,18 @@ describe("webhook do agregador", () => {
         checkpoints: [{ carrier_status: "TRANSFERENCIA", location: "Curitiba/PR", checkpoint_time: "2026-10-09T10:00:00Z" }],
       },
     };
-    await t.call("POST", "/webhooks/aggregator", payload);
-    const again = await t.call("POST", "/webhooks/aggregator", payload);
+    await t.webhook(payload);
+    const again = await t.webhook(payload);
     expect(again.body.new_events).toBe(0);
   });
 
   it("payload em formato inesperado responde 400 e referência desconhecida responde 404", async () => {
     const t = setup();
-    const bad = await t.call("POST", "/webhooks/aggregator", { foo: "bar" });
+    const bad = await t.webhook({ foo: "bar" });
     expect(bad.status).toBe(400);
     expect(bad.body.error.code).toBe("payload_invalido");
 
-    const unknown = await t.call("POST", "/webhooks/aggregator", {
+    const unknown = await t.webhook({
       tracker: { id: "trk_404", tracking_number: "X", carrier: "correios", checkpoints: [] },
     });
     expect(unknown.status).toBe(404);

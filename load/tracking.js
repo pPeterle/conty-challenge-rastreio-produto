@@ -2,10 +2,19 @@
 // ordem e por dois caminhos (webhook e polling) ao mesmo tempo.
 import http from "k6/http";
 import { check } from "k6";
+import crypto from "k6/crypto";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:3105";
 const AGG_URL = __ENV.AGG_URL || "http://localhost:3115";
-const JSON_HEADERS = { headers: { "content-type": "application/json" } };
+const SECRET = __ENV.WEBHOOK_SECRET || "segredo-local";
+const FORGED_ONLY = http.expectedStatuses(401);
+
+function signed(body) {
+  return {
+    "content-type": "application/json",
+    "x-aggregator-signature": "sha256=" + crypto.hmac("sha256", SECRET, body, "hex"),
+  };
+}
 
 export const options = {
   scenarios: {
@@ -46,13 +55,25 @@ export default function (shipments) {
   const target = shipments[Math.floor(Math.random() * shipments.length)];
   const roll = Math.random();
 
-  if (roll < 0.7) {
+  if (roll < 0.65) {
     // Subconjunto embaralhado, com o primeiro evento repetido no fim.
     const subset = shuffled(target.tracker.checkpoints).slice(0, 1 + Math.floor(Math.random() * 3));
     subset.push(subset[0]);
     const body = JSON.stringify({ tracker: Object.assign({}, target.tracker, { checkpoints: subset }) });
-    const res = http.post(`${BASE_URL}/webhooks/aggregator`, body, Object.assign({ tags: { name: "webhook" } }, JSON_HEADERS));
+    const res = http.post(`${BASE_URL}/webhooks/aggregator`, body, { headers: signed(body), tags: { name: "webhook" } });
     check(res, { "webhook 200": (r) => r.status === 200 });
+  } else if (roll < 0.7) {
+    // Webhook forjado dizendo "entregue", com assinatura de outro segredo: tem que ser recusado.
+    const forged = { checkpoint_id: "forjado-" + Math.random(), carrier_status: "delivered", checkpoint_time: new Date().toISOString() };
+    const body = JSON.stringify({ tracker: Object.assign({}, target.tracker, { checkpoints: [forged] }) });
+    const headers = signed(body);
+    headers["x-aggregator-signature"] = "sha256=" + crypto.hmac("sha256", "segredo-errado", body, "hex");
+    const res = http.post(`${BASE_URL}/webhooks/aggregator`, body, {
+      headers,
+      tags: { name: "webhook-forjado" },
+      responseCallback: FORGED_ONLY,
+    });
+    check(res, { "webhook forjado 401": (r) => r.status === 401 });
   } else if (roll < 0.95) {
     const res = http.post(`${BASE_URL}/shipments/${target.id}/refresh`, null, { tags: { name: "refresh" } });
     check(res, { "refresh 200": (r) => r.status === 200 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { TrackingAggregator, TrackingUpdate } from "./aggregator/types.ts";
+import type { TrackingAggregator, TrackingUpdate, WebhookRequest } from "./aggregator/types.ts";
 import type { Clock } from "./clock.ts";
 import type { Db, EventRow, ShipmentRow } from "./db.ts";
 import { isDelayed } from "./domain/delay.ts";
@@ -64,9 +64,9 @@ export class TrackingService {
     return this.apply(shipment.id, update.events);
   }
 
-  /** Webhook: o corpo vem no formato do agregador e é traduzido pelo próprio cliente dele. */
-  ingestWebhook(body: unknown): IngestResult {
-    const update: TrackingUpdate = this.aggregator.parseWebhook(body);
+  /** Webhook: o cliente do agregador autentica e traduz; aqui só chega evento normalizado. */
+  ingestWebhook(request: WebhookRequest): IngestResult {
+    const update: TrackingUpdate = this.aggregator.parseWebhook(request);
     const shipment = this.db.findShipmentByRef(update.ref);
     if (!shipment) throw new NotFoundError(`nenhuma remessa cadastrada para a referência ${update.ref}`);
     return this.apply(shipment.id, update.events);

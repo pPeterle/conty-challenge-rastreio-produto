@@ -39,7 +39,7 @@ describe("webhooks e polls concorrentes, repetidos e fora de ordem", () => {
       if (i % 4 === 0) return t.call("POST", `/shipments/${s.id}/refresh`);
       // Cada webhook leva um subconjunto embaralhado, com repetição.
       const subset = shuffle(tracker.checkpoints, random).slice(0, 1 + Math.floor(random() * 4));
-      return t.call("POST", "/webhooks/aggregator", { tracker: { ...tracker, checkpoints: [...subset, subset[0]] } });
+      return t.webhook({ tracker: { ...tracker, checkpoints: [...subset, subset[0]] } });
     });
     const results = await Promise.all(requests);
     expect(results.every((r) => r.status === 200)).toBe(true);
