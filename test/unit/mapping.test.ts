@@ -114,3 +114,13 @@ describe("identidade e data do checkpoint", () => {
     expect(rawCheckpointSchema.safeParse({ carrier_status: "x", checkpoint_time: value }).success).toBe(true);
   });
 });
+
+describe("chaves herdadas de Object.prototype", () => {
+  const keys = ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf", "CONSTRUCTOR"];
+  it.each(["correios", "jadlog", "loggi"].flatMap((carrier) => keys.map((key) => [carrier, key])))(
+    "%s / %s vira desconhecido",
+    (carrier, key) => {
+      expect(mapCarrierStatus(carrier, key)).toBe("desconhecido");
+    },
+  );
+});
